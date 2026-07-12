@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your ESK Packaging Order Confirmation</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+            color: #333333;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        td, th {
+            padding: 0; /* Reset padding for cells */
+        }
+        .container {
+            max-width: 600px;
+            margin: 20px auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        .header {
+            background-color: #4A90E2; /* A shade of blue from the website */
+            padding: 20px 0;
+            text-align: center;
+        }
+        .header img {
+            max-width: 300px;
+            height: auto;
+        }
+        .content {
+            padding: 20px 30px;
+        }
+        .button {
+            display: inline-block;
+            background-color: #F5A623; /* A shade of orange/yellow from the website */
+            color: #ffffff;
+            padding: 10px 20px;
+            border-radius: 5px;
+            text-decoration: none;
+        }
+        .footer {
+            background-color: #333333;
+            color: #ffffff;
+            padding: 20px 30px;
+            text-align: center;
+            font-size: 12px;
+        }
+        .order-summary {
+            margin-top: 20px;
+            border: 1px solid #eeeeee;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        .order-summary th, .order-summary td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #eeeeee;
+        }
+        /* Right-align numeric columns (quantity/price) */
+        .order-summary th.price, .order-summary td.price,
+        .order-summary th.qty, .order-summary td.qty {
+            text-align: right;
+        }
+        .order-summary th {
+            background-color: #f9f9f9;
+            font-weight: bold;
+        }
+        .order-summary tr:last-child td {
+            border-bottom: none;
+        }
+        .total-row td {
+            font-weight: bold;
+            background-color: #f9f9f9;
+        }
+        .cta {
+            text-align: center;
+            padding: 20px 0;
+        }
+        .cta a {
+            display: inline-block;
+            background: linear-gradient(90deg,#F59E0B,#F97316);
+            color: #ffffff !important;
+            padding: 12px 26px;
+            border-radius: 8px;
+            font-weight: 700;
+            text-decoration: none;
+            box-shadow: 0 6px 18px rgba(249,115,22,0.18);
+        }
+        .cta a:hover { opacity: 0.95; }
+    </style>
+</head>
+<body>
+    <table class="container" role="presentation" cellspacing="0" cellpadding="0" border="0">
+        <tr>
+            <td class="header">
+                <img src="cid:logo" alt="ESK Packaging Logo">
+            </td>
+        </tr>
+        <tr>
+            <td class="content">
+                <h1 style="color: #4A90E2;">Your Order is Confirmed!</h1>
+                <p>Dear {{username}}</p>
+                <p>Thank you for your recent purchase from ESK Packaging. We are pleased to confirm your order details below.</p>
+
+                <h2 style="color: #333333;">Order #<span style="color: #F5A623;">{{orderNumber}}</span></h2>
+                <!-- <p>You can track the status of your order by visiting your account on our website or by clicking the link below:</p>
+                <p style="text-align: center; margin: 20px 0;">
+                    <a href="[Tracking Link]" class="button">Track Your Order</a>
+                </p> -->
+
+                <h2 style="color: #333333;">Order Details:</h2>
+                <table class="order-summary" role="presentation" cellspacing="0" cellpadding="0" border="0">
+                    <thead>
+                        <tr>
+                            <th>Item</th>
+                            <th style="text-align: right;">Quantity</th>
+                            <th style="text-align: right;">Price</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{#each items}}
+                        <tr>
+                            <td>{{this.title}}</td>
+                            <td class="qty">{{this.quantity}}</td>
+                            <td class="price">${{this.price}}</td>
+                        </tr>
+                        {{/each}}
+                    </tbody>
+                </table>
+
+                <table style="width: 100%; margin-top: 20px;" role="presentation" cellspacing="0" cellpadding="0" border="0">
+                    <tr>
+                        <td style="padding: 5px 0;">Subtotal:</td>
+                        <td style="text-align: right; padding: 5px 0;">${{subtotal}}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 5px 0;">Shipping:</td>
+                        <td style="text-align: right; padding: 5px 0;">${{shipping}}</td>
+                    </tr>
+                    <!-- <tr>
+                        <td style="padding: 5px 0;">Tax:</td>
+                        <td style="text-align: right; padding: 5px 0;">$[Tax.00]</td>
+                    </tr> -->
+                    <tr class="total-row">
+                        <td style="padding: 10px 0;"><strong>Total:</strong></td>
+                        <td style="text-align: right; padding: 10px 0;"><strong>${{price}}</strong></td>
+                    </tr>
+                </table>
+
+                <p style="margin-top: 30px;">If you have any questions regarding your order, please do not hesitate to contact our customer support team.</p>
+                <p>Thank you for choosing ESK Packaging.</p>
+                <p>Sincerely,<br>The ESK Packaging Team</p>
+            </td>
+        </tr>
+        <!-- Call-to-action: view order history -->
+        <tr>
+            <td>
+                <div class="cta">
+                    <a href="https://www.eskpackaging.com/auth/my-account/order-history" target="_blank" rel="noopener noreferrer">Click here to view your order history on our website</a>
+                </div>
+            </td>
+        </tr>
+        <tr>
+            <td class="footer">
+                <p>&copy; 2025 ESK Packaging. All rights reserved.</p>
+                <p><a href="https://www.eskpackaging.com" style="color: #ffffff; text-decoration: none;">eskpackaging.com</a></p>
+                </td>
+        </tr>
+    </table>
+</body>
+</html>

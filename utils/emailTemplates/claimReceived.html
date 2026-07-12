@@ -1,0 +1,56 @@
+<html>
+  <body style="font-family: Arial, Helvetica, sans-serif; color: #333;">
+    <h2>New Claim Received</h2>
+    <p>Hello Admin,</p>
+    <p>A new customer claim has been submitted. Below are the details:</p>
+
+    {{#if customer}}
+    <h3>Customer Info</h3>
+    <table style="width: 100%; border-collapse: collapse; margin-bottom: 12px;">
+      <tr>
+        <td style="padding: 6px; border: 1px solid #e0e0e0;"><strong>Customer ID</strong></td>
+        <td style="padding: 6px; border: 1px solid #e0e0e0;">{{customer.id}}</td>
+      </tr>
+      <tr>
+        <td style="padding: 6px; border: 1px solid #e0e0e0;"><strong>Customer Name</strong></td>
+        <td style="padding: 6px; border: 1px solid #e0e0e0;">{{customer.name}}</td>
+      </tr>
+      <tr>
+        <td style="padding: 6px; border: 1px solid #e0e0e0;"><strong>Customer Email</strong></td>
+        <td style="padding: 6px; border: 1px solid #e0e0e0;">{{customer.email}}</td>
+      </tr>
+    </table>
+    {{/if}}
+
+    <table style="width: 100%; border-collapse: collapse;">
+      <tr>
+        <td style="padding: 6px; border: 1px solid #e0e0e0;"><strong>Account</strong></td>
+        <td style="padding: 6px; border: 1px solid #e0e0e0;">{{#if claim}}{{claim.account}}{{else}}-{{/if}}</td>
+      </tr>
+      <tr>
+        <td style="padding: 6px; border: 1px solid #e0e0e0;"><strong>Company</strong></td>
+        <td style="padding: 6px; border: 1px solid #e0e0e0;">{{#if claim}}{{claim.companyName}}{{else}}-{{/if}}</td>
+      </tr>
+      <tr>
+        <td style="padding: 6px; border: 1px solid #e0e0e0;"><strong>Contact Name</strong></td>
+        <td style="padding: 6px; border: 1px solid #e0e0e0;">{{#if claim}}{{claim.contactName}}{{else}}-{{/if}}</td>
+      </tr>
+      <tr>
+        <td style="padding: 6px; border: 1px solid #e0e0e0;"><strong>Email</strong></td>
+        <td style="padding: 6px; border: 1px solid #e0e0e0;">{{#if claim}}{{claim.email}}{{else}}-{{/if}}</td>
+      </tr>
+      <tr>
+        <td style="padding: 6px; border: 1px solid #e0e0e0;"><strong>Order No</strong></td>
+        <td style="padding: 6px; border: 1px solid #e0e0e0;">{{#if claim}}{{claim.orderNo}}{{else}}-{{/if}}</td>
+      </tr>
+      <tr>
+        <td style="padding: 6px; border: 1px solid #e0e0e0;"><strong>Description</strong></td>
+        <td style="padding: 6px; border: 1px solid #e0e0e0;">{{#if claim}}{{claim.description}}{{else}}-{{/if}}</td>
+      </tr>
+    </table>
+
+    <p style="margin-top: 18px;">You can view this claim in the admin panel.</p>
+
+    <p>Regards,<br/>ESK Packaging</p>
+  </body>
+</html>
