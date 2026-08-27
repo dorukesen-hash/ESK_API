@@ -1,14 +1,31 @@
 const { OrderItemStatus } = require('../db/models')
+const AppError = require('../utils/appError')
 
-const getOrderitemstatus = async () => {
-    return await OrderItemStatus.findAll()
+const getOrderItemStatuses = async () => {
+	return await OrderItemStatus.findAll()
 }
 
-const addOrderitemstatus = async (param) => {
-    return await OrderItemStatus.create({ ...param })
+const getOrderItemStatus = async (id) => {
+	return await OrderItemStatus.findByPk(id)
+}
+
+const saveOrderItemStatus = async (param) => {
+	return await OrderItemStatus.create({ ...param })
+}
+
+const editOrderItemStatus = async (param) => {
+	if (!param.id) throw new AppError('Id not found!', 500)
+	return await OrderItemStatus.update({ ...param }, { where: { id: param.id } })
+}
+
+const deleteOrderItemStatus = async (id) => {
+	return await OrderItemStatus.destroy({ where: { id: id } })
 }
 
 module.exports = {
-    getOrderitemstatus,
-    addOrderitemstatus
+	getOrderItemStatuses,
+	getOrderItemStatus,
+	saveOrderItemStatus,
+	editOrderItemStatus,
+	deleteOrderItemStatus
 }
