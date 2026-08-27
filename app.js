@@ -23,7 +23,10 @@ app.use(
         origin: [
             "http://localhost:3000",
             "https://esk-packaging-fe.vercel.app",
-            "https://www.eskpackaging.com"
+            "https://www.eskpackaging.com",
+            // ESK_ADMIN (standalone admin panel, separate origin from ESK_FE)
+            "http://localhost:3002",
+            "https://admin.eskpackaging.com"
         ],
         credentials: true, // Required for cookies to work
         methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
