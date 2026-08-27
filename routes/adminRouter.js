@@ -7,8 +7,14 @@ const { getShipments, getSingleShipment, updateShipment } = require('../controll
 const { uploadVariantExcel } = require('../controller/variantController')
 const { OrderItem } = require('../db/models')
 const AppError = require('../utils/appError');
+const requireAuth = require('../middleware/requireAuth')
+const requireAdmin = require('../middleware/requireAdmin')
 const multer = require('multer')
 const upload = multer({storage: multer.memoryStorage()})
+
+// Every route below is admin-only: verified access token (requireAuth) + isAdmin === "admin" (requireAdmin)
+router.use(requireAuth)
+router.use(requireAdmin)
 
 
 // Description
