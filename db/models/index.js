@@ -207,6 +207,7 @@ module.exports = {
 		Deci,
 		Category,
 		Subcategory,
+		Description,
 		Invoice,
 		Cart,
 		Cookie,
