@@ -384,6 +384,30 @@ Tüm endpoint'ler `/api` prefix'i altında çalışır.
 
 ---
 
+## 31. Order Status Router (`/api/orderstatuses`)
+
+| Method | Path | Açıklama |
+|--------|------|----------|
+| GET | `/api/orderstatuses/` | Tüm sipariş durumlarını listeler |
+| GET | `/api/orderstatuses/:id` | Tek sipariş durumu getir |
+| POST | `/api/orderstatuses/` | Sipariş durumu ekle |
+| PUT | `/api/orderstatuses/` | Sipariş durumu güncelle |
+| DELETE | `/api/orderstatuses/:id` | Sipariş durumu sil |
+
+---
+
+## 32. Order Item Status Router (`/api/orderitemstatuses`)
+
+| Method | Path | Açıklama |
+|--------|------|----------|
+| GET | `/api/orderitemstatuses/` | Tüm sipariş kalemi durumlarını listeler |
+| GET | `/api/orderitemstatuses/:id` | Tek sipariş kalemi durumu getir |
+| POST | `/api/orderitemstatuses/` | Sipariş kalemi durumu ekle |
+| PUT | `/api/orderitemstatuses/` | Sipariş kalemi durumu güncelle |
+| DELETE | `/api/orderitemstatuses/:id` | Sipariş kalemi durumu sil |
+
+---
+
 ## Özet — Erişim Kısıtlamaları
 
 | Router | Base Path | Auth Gerekiyor mu? | Admin Gerekli mi? |
