@@ -67,10 +67,7 @@ const createClaim = async (req, res, next) => {
 
 const adminListClaims = async (req, res, next) => {
   try {
-    // admin check
-    if (!req.user || req.user.isAdmin !== 'admin') {
-      return res.status(403).json({ message: 'Forbidden' })
-    }
+    // admin check now handled by requireAuth+requireAdmin on the route
     // pagination & search
     const limit = Math.max(1, parseInt(req.query.limit)) || 20
     const offset = Math.max(0, parseInt(req.query.offset)) || 0
@@ -116,9 +113,6 @@ const getClaim = async (req, res, next) => {
 
 const markRead = async (req, res, next) => {
   try {
-    if (!req.user || req.user.isAdmin !== 'admin') {
-      return res.status(403).json({ message: 'Forbidden' })
-    }
     const id = req.params.id
     const claim = await Claim.findByPk(id)
     if (!claim) return res.status(404).json({ message: 'Not found' })
@@ -132,9 +126,6 @@ const markRead = async (req, res, next) => {
 
 const deleteClaim = async (req, res, next) => {
   try {
-    if (!req.user || req.user.isAdmin !== 'admin') {
-      return res.status(403).json({ message: 'Forbidden' })
-    }
     const id = req.params.id
     const claim = await Claim.findByPk(id)
     if (!claim) return res.status(404).json({ message: 'Not found' })
