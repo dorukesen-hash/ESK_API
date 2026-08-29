@@ -172,6 +172,9 @@ const getSingleOrder = async (id) => {
         attributes: [
           "extra_informations"
           ],
+      },
+      {
+        model: Billing,
       }
     ]
    })
@@ -180,16 +183,20 @@ const getSingleOrder = async (id) => {
 const updateOrder = async (id, data) => {
  const { billingAddress, shippingAddress, adminNote} = data;
 
- const  {name, firstline, secondline,city, state, zip, phone, email } = billingAddress;
+  // update or create billing address - billingAddress is optional, an order
+  // may be edited (e.g. just the admin note) without touching billing at all
+  if (billingAddress) {
+    const { name, firstline, secondline, city, state, zip, phone, email } = billingAddress;
 
-  // update or create billing address
-  if( billingAddress.id !== 0 ) {
+    if (billingAddress.id) {
       await Billing.update(billingAddress, { where: { id: billingAddress.id } });
-  } else {
-      await Billing.create({
+    } else {
+      const newBilling = await Billing.create({
         name, firstline, secondline, city, state, zip, phone, email
       });
+      await Order.update({ billingId: newBilling.id }, { where: { id } });
     }
+  }
 
  // Order update - shipping address
     await Order.update({...shippingAddress,extra_informations :{adminNote} }, { where: { id:id } });
