@@ -1,3 +1,4 @@
+const { Op } = require('sequelize');
 const { Customer, Cart } = require('../db/models');
 const { createAndWhere } = require('./scopes');
 
@@ -14,14 +15,12 @@ const getCustomers = async (data) => {
   const opt = [];
 
   if (globalFilter && globalFilter !== "") {
+    const term = decodeURIComponent(globalFilter);
     opt.push({
       [Op.or]: [
-        {
-          title: {
-            [Op.iLike]: `%${decodeURIComponent(globalFilter)}%`,
-          },
-        },
-        { sku: { [Op.iLike]: `%${decodeURIComponent(globalFilter)}%` } },
+        { name: { [Op.iLike]: `%${term}%` } },
+        { email: { [Op.iLike]: `%${term}%` } },
+        { phone: { [Op.iLike]: `%${term}%` } },
       ],
     });
   }
