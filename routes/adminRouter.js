@@ -5,6 +5,7 @@ const { deleteImageConnections } = require('../controller/imageController')
 const { getOrders, getSingleOrder, updateOrder, updateOrderStatus, completeOrder } = require('../controller/orderController')
 const { getShipments, getSingleShipment, updateShipment } = require('../controller/shipmentController')
 const { uploadVariantExcel } = require('../controller/variantController')
+const { getShippingprofiles } = require('../controller/shippingProfile')
 const { OrderItem } = require('../db/models')
 const AppError = require('../utils/appError');
 const requireAuth = require('../middleware/requireAuth')
@@ -307,6 +308,17 @@ router.delete('/variant/:id', async (req, res, next) => {
 router.get('/customers/', async (req, res, next) => {
 	try {
 		const data = await getCustomers(req.query)
+		res.status(200).send(data)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// GET /api/admin/customers/:userId/shipping-profiles
+router.get('/customers/:userId/shipping-profiles', async (req, res, next) => {
+	try {
+		const { userId } = req.params
+		const data = await getShippingprofiles(userId)
 		res.status(200).send(data)
 	} catch (error) {
 		next(error)
