@@ -126,7 +126,21 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    res.json({data: user, message: "Login successful" });
+    const safeUser = {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      surname: user.surname,
+      address: user.address,
+      phone: user.phone,
+      dateOfBirth: user.dateOfBirth,
+      isActive: user.isActive,
+      isAuthenticated: user.isAuthenticated,
+      isPaid: user.isPaid,
+      isAdmin: user.isAdmin,
+    };
+
+    res.json({data: safeUser, message: "Login successful" });
   } catch (error) {
     res.status(500).json({ message: "Error logging in" });
   }
