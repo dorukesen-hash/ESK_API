@@ -1,8 +1,8 @@
 const { ShippingProfiles } = require("../db/models");
 const AppError = require("../utils/appError");
 
-const getShippingprofiles = async (id) => {
-  return await ShippingProfiles.findAll({where: {id: id}});
+const getShippingprofiles = async (userId) => {
+  return await ShippingProfiles.findAll({where: {userId: userId}});
 };
 
 const saveShippingprofiles = async (param) => {
