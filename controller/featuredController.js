@@ -45,6 +45,31 @@ const getVariantsForFeatured = async (data) => {
 
 
 
+// Distinct source variants that already have at least one FBT target
+// configured, with a target count - lets the admin page open on a list of
+// "already set up" sources instead of requiring a fresh search every time.
+const getFeaturedSources = async () => {
+  const rows = await Featured.findAll({
+    attributes: ["source_id"],
+    include: [{ model: Variant, as: "source", attributes: ["id", "stock", "title"] }],
+    order: [["source_id", "ASC"]],
+  });
+
+  const bySource = new Map();
+  for (const row of rows) {
+    if (!bySource.has(row.source_id)) {
+      bySource.set(row.source_id, {
+        id: row.source.id,
+        title: row.source.title,
+        stock: row.source.stock,
+        targetCount: 0,
+      });
+    }
+    bySource.get(row.source_id).targetCount += 1;
+  }
+  return Array.from(bySource.values());
+};
+
 const getFeaturedProduct = async (id) => {
   return await Featured.findAll({
     where: { source_id: id },
@@ -108,6 +133,7 @@ const deleteFeaturedProducts = async (target_id) => {
 
 module.exports = {
 	getVariantsForFeatured,
+	getFeaturedSources,
 	getFeaturedProduct,
 	saveFeaturedProducts,
 	deleteFeaturedProducts
