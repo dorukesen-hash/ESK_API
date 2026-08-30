@@ -15,6 +15,7 @@ const AppError = require("../utils/appError");
 const { sequelize } = require("sequelize");
 const Description = require("../db/models/description");
 const Dimension = require("../db/models/dimensions");
+const { logVariantCreate } = require("./variantAuditController");
 
 const getVariants = async () => {
   return await Variant.findAll();
@@ -132,7 +133,7 @@ const deleteVariant = async (id) => {
   return await Variant.destroy({ where: { id: id } });
 };
 
-const uploadVariantExcel = async (hierarchyType, hierarchyId, fileBuffer) => {
+const uploadVariantExcel = async (hierarchyType, hierarchyId, fileBuffer, userId) => {
   const data = XLSX.read(fileBuffer.buffer, { type: "buffer" });
   const sheetName = data.SheetNames[0]; // Dinamik sheet adı
   let rowObject = XLSX.utils.sheet_to_json(data.Sheets[sheetName], {
@@ -341,7 +342,8 @@ const uploadVariantExcel = async (hierarchyType, hierarchyId, fileBuffer) => {
         variantData.productId = prodId;
       }
 
-      await Variant.create(variantData);
+      const created = await Variant.create(variantData);
+      await logVariantCreate(created.id, userId, created);
     } catch (error) {
       console.error("Hata:", line["Stock #"], error);
       throw new AppError(`Variant oluşturulamadı: ${line["Stock #"]}`, 500);

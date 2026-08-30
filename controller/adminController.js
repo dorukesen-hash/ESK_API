@@ -11,6 +11,7 @@ const {
 } = require("../db/models");
 const Description = require("../db/models/description");
 const { createAndWhere } = require("./scopes");
+const { logVariantFieldChanges, logVariantDelete } = require("./variantAuditController");
 
 //ADMIN -PRODUCTS - CATEGORIES TAB / GET ALL
 const getCategoriesforAdmin = async () => {
@@ -367,19 +368,27 @@ const getVariantsForAdmin = async (data) => {
 
 const addVariantForAdmin = async (data) => {};
 
-const updateVariantForAdmin = async (data) => {
+const updateVariantForAdmin = async (data, userId) => {
+  const { id, ...fields } = data;
+
+  const existing = await Variant.findByPk(id);
+  await logVariantFieldChanges(id, userId, existing, fields);
 
   await Variant.update(
     {
-      ...data
+      ...fields
     },
-    { where: { id: data.id } }
+    { where: { id } }
   );
 
   return { success: true, message: "Variant updated successfully" };
 };
 
-const deleteVariantForAdmin = async (id) => {
+const deleteVariantForAdmin = async (id, userId) => {
+  const existing = await Variant.findByPk(id);
+  if (existing) {
+    await logVariantDelete(id, userId, existing);
+  }
   return await Variant.destroy({ where: { id } });
 };
 

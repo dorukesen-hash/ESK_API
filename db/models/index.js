@@ -33,6 +33,7 @@ const Description = require('./description')
 const Billing = require('./billing')
 const Featured = require('./featured')
 const Claim = require('./claim')
+const VariantAuditLog = require('./variantAuditLog')
 
 
 User.hasMany(Category);
@@ -162,6 +163,12 @@ SpecialPrices.belongsTo(User)
 User.hasMany(Claim)
 Claim.belongsTo(User)
 
+// Variant audit log
+Variant.hasMany(VariantAuditLog)
+VariantAuditLog.belongsTo(Variant)
+User.hasMany(VariantAuditLog)
+VariantAuditLog.belongsTo(User)
+
 Customer.hasMany(Transaction)
 Transaction.belongsTo(Customer)
 
@@ -227,5 +234,6 @@ module.exports = {
 		Price,
 		Featured,
 		Claim,
-		Billing
+		Billing,
+		VariantAuditLog
 	};
