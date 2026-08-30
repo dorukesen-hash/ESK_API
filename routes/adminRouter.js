@@ -5,6 +5,8 @@ const { deleteImageConnections } = require('../controller/imageController')
 const { getOrders, getSingleOrder, updateOrder, updateOrderStatus, completeOrder } = require('../controller/orderController')
 const { getShipments, getSingleShipment, updateShipment } = require('../controller/shipmentController')
 const { uploadVariantExcel } = require('../controller/variantController')
+const { exportVariantsExcel, bulkImportVariantsExcel } = require('../controller/variantBulkController')
+const { getVariantAuditLog } = require('../controller/variantAuditController')
 const { getShippingprofiles } = require('../controller/shippingProfile')
 const { OrderItem } = require('../db/models')
 const AppError = require('../utils/appError');
@@ -282,7 +284,7 @@ router.get('/variant/', async (req, res, next) => {
 router.put('/variant/', async (req, res, next) => {
 	
 	try {
-		const data = await updateVariantForAdmin(req.body)
+		const data = await updateVariantForAdmin(req.body, req.user.id)
 		res.status(200).send(data)
 	} catch (error) {
 		next(error)
@@ -293,9 +295,9 @@ router.put('/variant/', async (req, res, next) => {
 router.delete('/variant/:id', async (req, res, next) => {
 	try {
 		const {id} = req.params
-		if (!id) throw new AppError('Id not found', 500) 
+		if (!id) throw new AppError('Id not found', 500)
 		await deleteImageConnections('variant',id)
-		await deleteVariantForAdmin(id)
+		await deleteVariantForAdmin(id, req.user.id)
 		res.sendStatus(200)
 	} catch (error) {
 		next(error)
@@ -331,12 +333,49 @@ router.post('/variant-upload',upload.single('file'), async(req,res,next) => {
 
 	const {hierarchy_type, hierarchy_id } =req.headers;
 	try {
-		const data = await uploadVariantExcel(hierarchy_type,hierarchy_id, req.file)
+		const data = await uploadVariantExcel(hierarchy_type,hierarchy_id, req.file, req.user.id)
 		res.status(200).send(data)
 	} catch (error) {
 		next(error)
 	}
 } )
+
+// VARIANT BULK EXPORT
+// GET /api/admin/variant/export
+router.get('/variant/export', async (req, res, next) => {
+	try {
+		const buffer = await exportVariantsExcel()
+		res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+		res.setHeader('Content-Disposition', 'attachment; filename="variants.xlsx"')
+		res.status(200).send(buffer)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// VARIANT BULK IMPORT (create rows with no ID, update rows with one)
+// POST /api/admin/variant/bulk-import
+router.post('/variant/bulk-import', upload.single('file'), async (req, res, next) => {
+	try {
+		if (!req.file) throw new AppError('Yüklenecek dosya bulunamadı.', 400)
+		const result = await bulkImportVariantsExcel(req.file, req.user.id)
+		res.status(200).send(result)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// VARIANT AUDIT LOG
+// GET /api/admin/variant/:id/audit-log
+router.get('/variant/:id/audit-log', async (req, res, next) => {
+	try {
+		const { id } = req.params
+		const data = await getVariantAuditLog(parseInt(id))
+		res.status(200).send(data)
+	} catch (error) {
+		next(error)
+	}
+})
 
 
 
