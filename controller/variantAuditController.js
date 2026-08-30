@@ -1,4 +1,4 @@
-const { VariantAuditLog, User } = require("../db/models");
+const { VariantAuditLog, User, Variant } = require("../db/models");
 
 const toPlain = (row) => (row && typeof row.toJSON === "function" ? row.toJSON() : row);
 
@@ -82,4 +82,30 @@ const getVariantAuditLog = async (variantId) => {
   });
 };
 
-module.exports = { logVariantFieldChanges, logVariantCreate, logVariantDelete, getVariantAuditLog };
+// Global, cross-variant activity feed (the per-variant one above is scoped
+// to a single id). Paginated - this table only grows over time. A deleted
+// variant's rows survive (the FK is ON DELETE SET NULL, not CASCADE) but
+// variantId becomes null, so `variant` comes back null for those - the
+// frontend falls back to a plain "(deleted variant)" label in that case.
+const getAllVariantAuditLog = async ({ page = 0, limit = 50 } = {}) => {
+  const limitNum = parseInt(limit) || 50;
+  const offsetNum = (parseInt(page) || 0) * limitNum;
+
+  return await VariantAuditLog.findAndCountAll({
+    include: [
+      { model: User, attributes: ["id", "name", "surname", "email"] },
+      { model: Variant, attributes: ["id", "title", "stock"] },
+    ],
+    order: [["createdAt", "DESC"]],
+    limit: limitNum,
+    offset: offsetNum,
+  });
+};
+
+module.exports = {
+  logVariantFieldChanges,
+  logVariantCreate,
+  logVariantDelete,
+  getVariantAuditLog,
+  getAllVariantAuditLog,
+};

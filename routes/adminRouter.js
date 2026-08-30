@@ -6,7 +6,7 @@ const { getOrders, getSingleOrder, updateOrder, updateOrderStatus, completeOrder
 const { getShipments, getSingleShipment, updateShipment } = require('../controller/shipmentController')
 const { uploadVariantExcel } = require('../controller/variantController')
 const { exportVariantsExcel, bulkImportVariantsExcel } = require('../controller/variantBulkController')
-const { getVariantAuditLog } = require('../controller/variantAuditController')
+const { getVariantAuditLog, getAllVariantAuditLog } = require('../controller/variantAuditController')
 const { getShippingprofiles } = require('../controller/shippingProfile')
 const { OrderItem } = require('../db/models')
 const AppError = require('../utils/appError');
@@ -371,6 +371,17 @@ router.get('/variant/:id/audit-log', async (req, res, next) => {
 	try {
 		const { id } = req.params
 		const data = await getVariantAuditLog(parseInt(id))
+		res.status(200).send(data)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// GLOBAL, CROSS-VARIANT AUDIT LOG
+// GET /api/admin/variant-audit-log
+router.get('/variant-audit-log', async (req, res, next) => {
+	try {
+		const data = await getAllVariantAuditLog(req.query)
 		res.status(200).send(data)
 	} catch (error) {
 		next(error)
