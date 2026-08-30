@@ -61,7 +61,7 @@ const getSubCategoriesforAdmin = async (searchItem) => {
       },
       { model: Variant, attributes: ["id", "title", "stock"] },
       { model: Product, attributes: ["id", "title"] },
-      { model: SubcategoryImages, include: [{ model: Image }] },
+      { model: SubcategoryImages, include: [{ model: Image }], separate: true, order: [["position", "ASC"]] },
     ],
   });
 };
@@ -198,7 +198,7 @@ const getProductsforAdmin = async (searchItem) => {
       { model: Category, attributes: ["id", "name"] },
       { model: Subcategory, attributes: ["id", "name"] },
       { model: Variant, attributes: ["id", "title", "stock"] },
-      { model: ProductImages, include: [{ model: Image }] },
+      { model: ProductImages, include: [{ model: Image }], separate: true, order: [["position", "ASC"]] },
     ],
   });
 };
@@ -369,7 +369,7 @@ const getVariantsForAdmin = async (data) => {
       {
         model: Product,
       },
-      { model: VariantImages, include: [{ model: Image }] },
+      { model: VariantImages, include: [{ model: Image }], separate: true, order: [["position", "ASC"]] },
     ],
   });
 };

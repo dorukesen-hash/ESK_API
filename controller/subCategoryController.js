@@ -38,7 +38,9 @@ const data = await Subcategory.findOne({
 						model: Image,
 						attributes: ['id', 'url']
 					}
-				]
+				],
+				separate: true,
+				order: [['position', 'ASC']]
 			},
 			{
               model:Variant ,
