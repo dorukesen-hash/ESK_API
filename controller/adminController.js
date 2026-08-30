@@ -392,6 +392,18 @@ const deleteVariantForAdmin = async (id, userId) => {
   return await Variant.destroy({ where: { id } });
 };
 
+// Admin-curated "Featured" list - a variant is either featured or not
+// (`featured` boolean), ordered by `featured_position` for the homepage grid.
+const getFeaturedVariantsForAdmin = async () => {
+  return await Variant.findAll({
+    where: { featured: true },
+    order: [
+      ["featured_position", "ASC"],
+      ["id", "ASC"],
+    ],
+  });
+};
+
 module.exports = {
   getCategoriesforAdmin,
   getVariantsForAdmin,
@@ -409,4 +421,5 @@ module.exports = {
   addVariantForAdmin,
   updateVariantForAdmin,
   deleteVariantForAdmin,
+  getFeaturedVariantsForAdmin,
 };

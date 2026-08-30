@@ -330,6 +330,15 @@ available: {
     type: Sequelize.BOOLEAN,
     allowNull: true,
   },
+featured: {
+    type: Sequelize.BOOLEAN,
+    allowNull: false,
+    defaultValue: false,
+  },
+featured_position: {
+    type: Sequelize.INTEGER,
+    allowNull: true,
+  },
 });
 
 module.exports = Variant;

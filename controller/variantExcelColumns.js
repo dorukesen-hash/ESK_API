@@ -17,6 +17,8 @@
 const VARIANT_EXCEL_COLUMNS = [
   { field: "stock", header: "Stock #", type: "text" },
   { field: "title", header: "Title", type: "text" },
+  { field: "featured", header: "Featured", type: "boolean" },
+  { field: "featured_position", header: "Featured Position", type: "number" },
   { field: "one_four_units", header: "1–4 Units", type: "number", decimal: true },
   { field: "five_nine_units", header: "5–9 Units", type: "number", decimal: true },
   { field: "ten_plus_units", header: "10+ Units", type: "number", decimal: true },

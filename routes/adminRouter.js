@@ -1,5 +1,5 @@
 const router = (module.exports = require('express').Router())
-const { getCategoriesforAdmin, getVariantsForAdmin, updateCategoryAdmin, addCategoryAdmin, deleteCategoryAdmin, getSubCategoriesforAdmin, addSubCategoryAdmin, updateSubCategoryAdmin, deleteSubCategoryAdmin, getProductsforAdmin, addProductAdmin, updateProductAdmin, deleteProductAdmin, updateVariantForAdmin, deleteVariantForAdmin } = require('../controller/adminController')
+const { getCategoriesforAdmin, getVariantsForAdmin, updateCategoryAdmin, addCategoryAdmin, deleteCategoryAdmin, getSubCategoriesforAdmin, addSubCategoryAdmin, updateSubCategoryAdmin, deleteSubCategoryAdmin, getProductsforAdmin, addProductAdmin, updateProductAdmin, deleteProductAdmin, updateVariantForAdmin, deleteVariantForAdmin, getFeaturedVariantsForAdmin } = require('../controller/adminController')
 const { getCustomers } = require('../controller/customerController')
 const { deleteImageConnections } = require('../controller/imageController')
 const { getOrders, getSingleOrder, updateOrder, updateOrderStatus, completeOrder } = require('../controller/orderController')
@@ -371,6 +371,17 @@ router.get('/variant/:id/audit-log', async (req, res, next) => {
 	try {
 		const { id } = req.params
 		const data = await getVariantAuditLog(parseInt(id))
+		res.status(200).send(data)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// ADMIN-CURATED FEATURED VARIANTS
+// GET /api/admin/variant/featured
+router.get('/variant/featured', async (req, res, next) => {
+	try {
+		const data = await getFeaturedVariantsForAdmin()
 		res.status(200).send(data)
 	} catch (error) {
 		next(error)
