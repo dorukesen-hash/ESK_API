@@ -247,13 +247,21 @@ const updateProductAdmin = async (data) => {
 
   try {
 
-    await Product.update({
+    const productFields = {
       title: title,
       sku: sku,
       available: available,
       description: description,
-      extradata: list_items
-    },{ where: { id: id } });
+    };
+    // list_items is optional; omitting it must leave existing extradata
+    // untouched (ProductFormModal used to always send [], silently wiping
+    // any real bullet-point content on every unrelated edit - same class of
+    // bug as the variants-array one below, fixed the same way).
+    if (list_items !== undefined) {
+      productFields.extradata = list_items;
+    }
+
+    await Product.update(productFields, { where: { id: id } });
 
     // variants is optional; omitting it (or sending undefined) must leave
     // existing variants untouched, not wipe them.
