@@ -18,8 +18,13 @@ const getVariantsForFeatured = async (data) => {
   const whereConditions = [];
 
   if (searchValue?.length > 0) {
-	  const searchField = { title: { [Op.iLike]: `%${searchValue}%` } }
-  
+	  const searchField = {
+		  [Op.or]: [
+			  { title: { [Op.iLike]: `%${searchValue}%` } },
+			  { stock: { [Op.iLike]: `%${searchValue}%` } },
+		  ],
+	  }
+
 	  whereConditions.push(searchField);
 	}
 
