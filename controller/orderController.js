@@ -1,10 +1,11 @@
-const { Order, OrderItem, Customer, Shipment, OrderStatus, User, Cart, Invoice, Transaction, Variant, VariantImages, Image, Carrier } = require('../db/models')
+const models = require('../db/models')
+const { Order, OrderItem, Customer, Shipment, OrderStatus, User, Cart, Invoice, Transaction, Variant, VariantImages, Image, Carrier, DiscountCode, DiscountCodeRedemption } = models
 const { Op } = require('sequelize')
 const { createAndWhere } = require('./scopes');
 const Billing = require('../db/models/billing');
 const sendEmail = require('../utils/sendEmail');
 const AppError = require('../utils/appError');
-const { resolveVariantPrice } = require('../utils/pricing');
+const { resolveVariantPrice, resolveOrderPricing } = require('../utils/pricing');
 
 function generateCustomUniqueId() {
   const now = new Date();
@@ -313,6 +314,18 @@ const createOrder = async (data) => {
   // Stripe webhook) - it's the only place we know for certain a payment was
   // actually confirmed by Stripe, not just claimed by the client.
 
+  // Resolve the same discount (explicit code or an auto-applied first-order
+  // code) that create-payment-intent already used to compute the Stripe
+  // charge - purely to record which code applied and by how much; the
+  // charged/stored total itself still comes from the confirmed PaymentIntent
+  // amount below, not from this recomputation.
+  const { appliedDiscountCode, discountAmount } = await resolveOrderPricing({
+    items,
+    user: foundUser,
+    discountCode: order.discountCode,
+    models,
+  });
+
   //CREATE BILLING
 
   const newBilling = await Billing.create({
@@ -383,6 +396,8 @@ const createOrder = async (data) => {
     // charge actually succeeded) is allowed to flip this to true.
     isPaid: false,
     stripePaymentIntentId: paymentIntent.id,
+    discountCodeId: appliedDiscountCode ? appliedDiscountCode.id : null,
+    discountAmount: appliedDiscountCode ? discountAmount : null,
     closure: "open",
     userId: foundUser.id,
     orderstatusId: 1,
@@ -432,6 +447,15 @@ const createOrder = async (data) => {
       variant_id: element.id
     });
   orderItems.push(createdItem);
+  }
+
+  if (appliedDiscountCode) {
+    await DiscountCode.increment('timesUsed', { by: 1, where: { id: appliedDiscountCode.id } });
+    await DiscountCodeRedemption.create({
+      discountCodeId: appliedDiscountCode.id,
+      userId: foundUser.id,
+      orderId: newOrder.id,
+    });
   }
 
   let itemsx = orderItems.map(item => ({

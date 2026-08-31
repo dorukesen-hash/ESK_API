@@ -105,6 +105,10 @@ const Order = db.define(
             type: Sequelize.STRING,
             allowNull: true,
             unique: true,
+        },
+        discountAmount: {
+            type: Sequelize.DECIMAL(10, 2),
+            allowNull: true,
         }
     },
     {

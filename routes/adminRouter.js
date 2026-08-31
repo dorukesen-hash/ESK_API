@@ -10,6 +10,7 @@ const { getShipments, getSingleShipment, updateShipment } = require('../controll
 const { uploadVariantExcel } = require('../controller/variantController')
 const { exportVariantsExcel, bulkImportVariantsExcel } = require('../controller/variantBulkController')
 const { getVariantAuditLog, getAllVariantAuditLog } = require('../controller/variantAuditController')
+const { getDiscountCodes, createDiscountCode, updateDiscountCode, deleteDiscountCode, getDiscountCodeRedemptions } = require('../controller/discountCodeController')
 const { getShippingprofiles } = require('../controller/shippingProfile')
 const { OrderItem } = require('../db/models')
 const AppError = require('../utils/appError');
@@ -481,6 +482,60 @@ router.get('/variant/:id/audit-log', async (req, res, next) => {
 router.get('/variant-audit-log', async (req, res, next) => {
 	try {
 		const data = await getAllVariantAuditLog(req.query)
+		res.status(200).send(data)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// DISCOUNT CODES
+// GET /api/admin/discount-codes
+router.get('/discount-codes', async (req, res, next) => {
+	try {
+		const data = await getDiscountCodes()
+		res.status(200).send(data)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// POST /api/admin/discount-codes
+router.post('/discount-codes', async (req, res, next) => {
+	try {
+		const data = await createDiscountCode(req.body)
+		res.status(201).send(data)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// PUT /api/admin/discount-codes/:id
+router.put('/discount-codes/:id', async (req, res, next) => {
+	try {
+		const { id } = req.params
+		const data = await updateDiscountCode(id, req.body)
+		res.status(200).send(data)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// DELETE /api/admin/discount-codes/:id
+router.delete('/discount-codes/:id', async (req, res, next) => {
+	try {
+		const { id } = req.params
+		await deleteDiscountCode(id)
+		res.sendStatus(200)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// GET /api/admin/discount-codes/:id/redemptions
+router.get('/discount-codes/:id/redemptions', async (req, res, next) => {
+	try {
+		const { id } = req.params
+		const data = await getDiscountCodeRedemptions(id)
 		res.status(200).send(data)
 	} catch (error) {
 		next(error)

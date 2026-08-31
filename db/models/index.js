@@ -34,6 +34,8 @@ const Billing = require('./billing')
 const Featured = require('./featured')
 const Claim = require('./claim')
 const VariantAuditLog = require('./variantAuditLog')
+const DiscountCode = require('./discountCode')
+const DiscountCodeRedemption = require('./discountCodeRedemption')
 
 
 User.hasMany(Category);
@@ -198,6 +200,20 @@ Featured.belongsTo(Variant, {
   as: "target"
 });
 
+// Discount codes
+DiscountCode.hasMany(DiscountCodeRedemption)
+DiscountCodeRedemption.belongsTo(DiscountCode)
+User.hasMany(DiscountCodeRedemption)
+DiscountCodeRedemption.belongsTo(User)
+// constraints: false - the live "order" table's id column has no PK/unique
+// constraint at the DB level (a pre-existing condition, not something this
+// association should try to fix), so a real FK to it fails at sync time.
+// Every other order_id FK in this codebase is similarly DB-unenforced.
+Order.hasOne(DiscountCodeRedemption, { constraints: false })
+DiscountCodeRedemption.belongsTo(Order, { constraints: false })
+DiscountCode.hasMany(Order)
+Order.belongsTo(DiscountCode)
+
 
 module.exports = {
 		User,
@@ -235,5 +251,7 @@ module.exports = {
 		Featured,
 		Claim,
 		Billing,
-		VariantAuditLog
+		VariantAuditLog,
+		DiscountCode,
+		DiscountCodeRedemption
 	};
