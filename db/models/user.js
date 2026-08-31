@@ -86,6 +86,10 @@ const User = db.define(
             type: Sequelize.STRING,
             allowNull: true
         },
+        discountPercent: {
+            type: Sequelize.DECIMAL(5, 2),
+            allowNull: true,
+        },
     }
 )
 

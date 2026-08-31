@@ -1,5 +1,7 @@
+const crypto = require('crypto')
 const { User, Cart, ShippingProfiles, Order} = require('../db/models')
 const AppError = require('../utils/appError')
+const sendEmail = require('../utils/sendEmail')
 
 
 // Find user by email
@@ -25,6 +27,60 @@ const updateUser = async (id, params) => {
     )
 }
 
+// Admin-facing update - whitelisted fields only, so a request body can never
+// smuggle in password/token/etc. through this endpoint. isAdmin is handled
+// separately below (normalized + guarded), not through this plain whitelist.
+const ADMIN_EDITABLE_USER_FIELDS = ['name', 'surname', 'email', 'phone', 'isActive', 'discountPercent'];
+const updateUserAdmin = async (id, params, actingAdminId) => {
+    const fields = {};
+    for (const key of ADMIN_EDITABLE_USER_FIELDS) {
+        if (params[key] !== undefined) fields[key] = params[key];
+    }
+
+    if (params.isAdmin !== undefined) {
+        // Legacy STRING column - only the exact value "admin" is treated as
+        // privileged elsewhere (requireAdmin, login), so a boolean from the
+        // admin UI is normalized to that exact string or null.
+        if (!params.isAdmin && String(id) === String(actingAdminId)) {
+            throw new AppError('Kendi yönetici yetkinizi kaldıramazsınız.', 400);
+        }
+        fields.isAdmin = params.isAdmin ? 'admin' : null;
+    }
+
+    await User.update(fields, { where: { id } });
+    return getUserById(id);
+}
+
+// Same token-generate + email-send sequence used by the public
+// forgot-password flow (routes/authRouter.js) - extracted here so an
+// admin-triggered reset can reuse it instead of duplicating it.
+const sendPasswordResetEmail = async (user) => {
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const hashedToken = crypto.createHash('sha256').update(resetToken).digest('hex');
+    const expireDate = new Date(Date.now() + 15 * 60 * 1000); // 15 dk
+
+    await updateUser(user.id, {
+        emailVerifyToken: hashedToken,
+        emailVerifyTokenExpire: expireDate,
+    });
+
+    const frontendURL = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const resetURL = `${frontendURL}/auth/reset-password/${resetToken}`;
+
+    try {
+        await sendEmail({
+            email: user.email,
+            subject: 'Reset Password',
+            resetURL,
+            username: user.name,
+            message: `Password reset link: ${resetURL}`,
+        });
+    } catch (err) {
+        await updateUser(user.id, { emailVerifyToken: null, emailVerifyTokenExpire: null });
+        throw err;
+    }
+}
+
 // find user by ID
 const getUserById = async (id) => {
    
@@ -40,7 +96,8 @@ const getUserById = async (id) => {
             'isActive',
             'isAuthenticated',
             'isPaid',
-            'isAdmin'
+            'isAdmin',
+            'discountPercent'
         ],
         include:[{model:Cart},{model: ShippingProfiles}]
     })
@@ -144,6 +201,7 @@ module.exports = {
     getUserByEmail,
     saveUser,
     updateUser,
+    updateUserAdmin,
     getUserById,
     getUserByReftoken,
     loginUser,
@@ -151,5 +209,6 @@ module.exports = {
     deleteUser,
     getUserBy,
     passChange,
-    getUserForRefToken
+    getUserForRefToken,
+    sendPasswordResetEmail
 }

@@ -21,7 +21,7 @@ router.get('/', async (req, res, next) => {
 router.get('/:id', async (req, res, next) => {
 	try {
 		const { id } = req.params
-		const data = await getVariant(id)
+		const data = await getVariant(id, req.user)
 		if(data){
 			res.status(200).json(data)
 		}
@@ -34,7 +34,7 @@ router.get('/:id', async (req, res, next) => {
 router.post('/id-list', async (req, res, next) => {
 	const { ids } = req.body
 	try {
-		const data = await getVariantByIdList(ids)
+		const data = await getVariantByIdList(ids, req.user)
 		if(data){
 			res.status(200).json(data)
 		}

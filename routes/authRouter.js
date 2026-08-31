@@ -11,12 +11,12 @@ const {
   getUserById,
   getUserByReftoken,
   getUserBy,
+  sendPasswordResetEmail,
 } = require("../controller/userController");
 const {
   generateTokens,
   verifyToken,
 } = require("../controller/tokenController");
-const sendEmail = require("../utils/sendEmail");
 
 //Register
 //POST /api/auth/register
@@ -229,32 +229,11 @@ router.post("/forgot-password", async (req, res) => {
 
     const user = await getUserByEmail(email);
     if (!user) return res.status(200).json({ message: genericMessage });
-    console.log(user.id)
-    // Token üret
-    const resetToken = crypto.randomBytes(32).toString("hex");
-    const hashedToken = crypto.createHash("sha256").update(resetToken).digest("hex");
-    const expireDate = new Date(Date.now() + 15 * 60 * 1000); // 15 dk
 
-    await updateUser(user.id, {
-      emailVerifyToken: hashedToken,
-      emailVerifyTokenExpire: expireDate,
-    });
-    const frontendURL = process.env.FRONTEND_URL || "http://localhost:3000";
-    const resetURL = `${frontendURL}/auth/reset-password/${resetToken}`;
-
-    // Mail gönder
     try {
-      await sendEmail({
-        email: user.email,
-        subject: "Reset Password",
-        resetURL,
-        username: user.name,
-        message: `Password reset link: ${resetURL}`,
-      });
+      await sendPasswordResetEmail(user);
       console.log("Reset email sent to:", user.email);
     } catch (err) {
-      // mail hatasında tokenları sıfırla
-      await updateUser(user.id, { emailVerifyToken: null, emailVerifyTokenExpire: null });
       return res.status(200).json({ err });
     }
 
