@@ -25,7 +25,7 @@ const getVariant = async (id) => {
   return await Variant.findOne({
   where: { id },
   include: [
-    { model: VariantImages, include: [{model: Image}] },
+    { model: VariantImages, include: [{model: Image}], separate: true, order: [["position", "ASC"]] },
     {
       model: Featured,
       as: "FPT",
@@ -57,6 +57,8 @@ const getVariantByIdList = async (ids) => {
             attributes: ["id", "url"],
           },
         ],
+        separate: true,
+        order: [["position", "ASC"]],
       }
     ],
   });

@@ -72,15 +72,15 @@ router.post('/delete', async (req, res) => {
 
       await deleteImageConnections(target,targetId)
 
-      let bulkData; 
+      let bulkData;
       if(target === "subcategory") {
-             bulkData = ids.map(item => ({subcategoryId: targetId, imageId: item }))
+             bulkData = ids.map((item, index) => ({subcategoryId: targetId, imageId: item, position: index }))
             await SubcategoryImages.bulkCreate(bulkData);
         } else if ( target === "product") {
-            bulkData = ids.map(item => ({productId: targetId, imageId: item }))
+            bulkData = ids.map((item, index) => ({productId: targetId, imageId: item, position: index }))
             await ProductImages.bulkCreate(bulkData);
         } else if ( target === "variant") {
-            bulkData = ids.map(item => ({variantId: targetId, imageId: item }))
+            bulkData = ids.map((item, index) => ({variantId: targetId, imageId: item, position: index }))
             await VariantImages.bulkCreate(bulkData);
         }
 
