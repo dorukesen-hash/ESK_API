@@ -2,6 +2,7 @@ const crypto = require('crypto')
 const { User, Cart, ShippingProfiles, Order} = require('../db/models')
 const AppError = require('../utils/appError')
 const sendEmail = require('../utils/sendEmail')
+const { logDiscountPercentChange } = require('./pricingAuditController')
 
 
 // Find user by email
@@ -45,6 +46,15 @@ const updateUserAdmin = async (id, params, actingAdminId) => {
             throw new AppError('Kendi yönetici yetkinizi kaldıramazsınız.', 400);
         }
         fields.isAdmin = params.isAdmin ? 'admin' : null;
+    }
+
+    if (fields.discountPercent !== undefined) {
+        const before = await User.findByPk(id, { attributes: ['discountPercent'] });
+        const oldValue = before?.discountPercent != null ? parseFloat(before.discountPercent) : null;
+        const newValue = fields.discountPercent != null ? parseFloat(fields.discountPercent) : null;
+        if (oldValue !== newValue) {
+            await logDiscountPercentChange({ targetUserId: id, actorUserId: actingAdminId, oldValue, newValue });
+        }
     }
 
     await User.update(fields, { where: { id } });

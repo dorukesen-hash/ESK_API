@@ -1,30 +1,30 @@
 const Stripe = require("stripe");
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
-const { Variant } = require("../db/models");
-const { resolveVariantPrice } = require("../utils/pricing");
+const models = require("../db/models");
+const { resolveOrderPricing } = require("../utils/pricing");
 const AppError = require("../utils/appError");
 
 // The charge amount is computed here, server-side, from real catalog prices -
 // never trust a raw dollar amount from the client (that was the previous
-// behavior: the browser could set `amount` to anything). `discountCode` is
-// accepted now but not yet validated/applied - a no-op until discount codes
-// are built, so this endpoint's request shape doesn't need to change twice.
-exports.createPaymentIntent = async (data, user) => {
-    const { items, shipping, currency = "usd" } = data;
+// behavior: the browser could set `amount` to anything). `discountCode` (an
+// explicitly-typed code) is optional - resolveOrderPricing also auto-tries a
+// firstOrderOnly code for logged-in users, same as createOrder, so the two
+// stay in agreement on the final amount.
+exports.createPaymentIntent = async (data, reqUser) => {
+    const { items, shipping, currency = "usd", discountCode } = data;
 
     if (!Array.isArray(items) || items.length === 0) {
         throw new AppError("Cart is empty.", 400);
     }
 
-    let subtotal = 0;
-    for (const item of items) {
-        const variant = await Variant.findByPk(item.variantId ?? item.id);
-        if (!variant) {
-            throw new AppError(`Variant ${item.variantId ?? item.id} not found.`, 400);
-        }
-        const unitPrice = await resolveVariantPrice(variant, item.quantity, user);
-        subtotal += (unitPrice || 0) * item.quantity;
-    }
+    // req.user is only the decoded JWT payload (id/email - see
+    // tokenController's getSender()), not a full row: discountPercent isn't
+    // in it, so a logged-in customer's blanket discount would silently be
+    // dropped from this endpoint's math while still applying in createOrder
+    // (which re-fetches the full user). Re-fetch here so both agree.
+    const user = reqUser?.id ? await models.User.findByPk(reqUser.id) : null;
+
+    const { subtotal } = await resolveOrderPricing({ items, user, discountCode, models });
 
     const shippingPrice = Number(shipping?.price) || 0;
     const amount = Math.round((subtotal + shippingPrice) * 100); // cents

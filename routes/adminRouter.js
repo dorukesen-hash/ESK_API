@@ -4,12 +4,16 @@ const { getCustomers, getCustomerDetailForAdmin } = require('../controller/custo
 const { updateUserAdmin, sendPasswordResetEmail, getUserById } = require('../controller/userController')
 const { saveShippingprofiles } = require('../controller/shippingProfile')
 const { getSpecialPricesForUser, upsertSpecialPrice, deleteSpecialPrice } = require('../controller/specialPriceController')
+const { getPricingAuditLogForUser } = require('../controller/pricingAuditController')
 const { deleteImageConnections } = require('../controller/imageController')
-const { getOrders, getSingleOrder, updateOrder, updateOrderStatus, completeOrder } = require('../controller/orderController')
+const { getOrders, getSingleOrder, updateOrder, updateOrderStatus, completeOrder, refundOrder } = require('../controller/orderController')
+const { getOrderAuditLog } = require('../controller/orderAuditController')
+const { getInvoicesForAdmin } = require('../controller/invoiceController')
 const { getShipments, getSingleShipment, updateShipment } = require('../controller/shipmentController')
 const { uploadVariantExcel } = require('../controller/variantController')
 const { exportVariantsExcel, bulkImportVariantsExcel } = require('../controller/variantBulkController')
 const { getVariantAuditLog, getAllVariantAuditLog } = require('../controller/variantAuditController')
+const { getDiscountCodes, createDiscountCode, updateDiscountCode, deleteDiscountCode, getDiscountCodeRedemptions } = require('../controller/discountCodeController')
 const { getShippingprofiles } = require('../controller/shippingProfile')
 const { OrderItem } = require('../db/models')
 const AppError = require('../utils/appError');
@@ -62,7 +66,7 @@ router.put('/orders/:id', async (req, res, next) => {
 // POST /api/admin/orders/status/
 router.post('/orders/status/', async (req, res, next) => {
 	try {
-		const data = await updateOrderStatus(req.body)
+		const data = await updateOrderStatus(req.body, req.user?.id)
 		res.status(200).send(data)
 	} catch (error) {
 		next(error)
@@ -72,7 +76,29 @@ router.post('/orders/status/', async (req, res, next) => {
 // POST /api/admin/orders/complete/
 router.post('/orders/complete/', async (req, res, next) => {
 	try {
-		const data = await completeOrder(req.body)
+		const data = await completeOrder(req.body, req.user?.id)
+		res.status(200).send(data)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// POST /api/admin/orders/:id/refund
+router.post('/orders/:id/refund', async (req, res, next) => {
+	try {
+		const { id } = req.params
+		const data = await refundOrder(id, req.user?.id)
+		res.status(200).send(data)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// GET /api/admin/orders/:id/audit-log
+router.get('/orders/:id/audit-log', async (req, res, next) => {
+	try {
+		const { id } = req.params
+		const data = await getOrderAuditLog(id)
 		res.status(200).send(data)
 	} catch (error) {
 		next(error)
@@ -361,7 +387,7 @@ router.post('/customers/:userId/special-prices', async (req, res, next) => {
 	try {
 		const { userId } = req.params
 		const { variantId, price } = req.body
-		const data = await upsertSpecialPrice({ userId, variantId, price })
+		const data = await upsertSpecialPrice({ userId, variantId, price, actorUserId: req.user?.id })
 		res.status(200).send(data)
 	} catch (error) {
 		next(error)
@@ -372,8 +398,19 @@ router.post('/customers/:userId/special-prices', async (req, res, next) => {
 router.delete('/special-prices/:id', async (req, res, next) => {
 	try {
 		const { id } = req.params
-		await deleteSpecialPrice(id)
+		await deleteSpecialPrice(id, req.user?.id)
 		res.sendStatus(200)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// GET /api/admin/customers/:userId/pricing-audit-log
+router.get('/customers/:userId/pricing-audit-log', async (req, res, next) => {
+	try {
+		const { userId } = req.params
+		const data = await getPricingAuditLogForUser(userId)
+		res.status(200).send(data)
 	} catch (error) {
 		next(error)
 	}
@@ -481,6 +518,71 @@ router.get('/variant/:id/audit-log', async (req, res, next) => {
 router.get('/variant-audit-log', async (req, res, next) => {
 	try {
 		const data = await getAllVariantAuditLog(req.query)
+		res.status(200).send(data)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// INVOICES
+// GET /api/admin/invoices
+router.get('/invoices', async (req, res, next) => {
+	try {
+		const data = await getInvoicesForAdmin(req.query)
+		res.status(200).send(data)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// DISCOUNT CODES
+// GET /api/admin/discount-codes
+router.get('/discount-codes', async (req, res, next) => {
+	try {
+		const data = await getDiscountCodes()
+		res.status(200).send(data)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// POST /api/admin/discount-codes
+router.post('/discount-codes', async (req, res, next) => {
+	try {
+		const data = await createDiscountCode(req.body)
+		res.status(201).send(data)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// PUT /api/admin/discount-codes/:id
+router.put('/discount-codes/:id', async (req, res, next) => {
+	try {
+		const { id } = req.params
+		const data = await updateDiscountCode(id, req.body)
+		res.status(200).send(data)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// DELETE /api/admin/discount-codes/:id
+router.delete('/discount-codes/:id', async (req, res, next) => {
+	try {
+		const { id } = req.params
+		await deleteDiscountCode(id)
+		res.sendStatus(200)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// GET /api/admin/discount-codes/:id/redemptions
+router.get('/discount-codes/:id/redemptions', async (req, res, next) => {
+	try {
+		const { id } = req.params
+		const data = await getDiscountCodeRedemptions(id)
 		res.status(200).send(data)
 	} catch (error) {
 		next(error)
