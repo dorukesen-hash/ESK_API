@@ -10,6 +10,7 @@ const { getOrders, getSingleOrder, updateOrder, updateOrderStatus, completeOrder
 const { getOrderAuditLog } = require('../controller/orderAuditController')
 const { getInvoicesForAdmin } = require('../controller/invoiceController')
 const { getShipments, getSingleShipment, updateShipment } = require('../controller/shipmentController')
+const { getShipmentStatus } = require('../controller/shipmentStatusController')
 const { uploadVariantExcel } = require('../controller/variantController')
 const { exportVariantsExcel, bulkImportVariantsExcel } = require('../controller/variantBulkController')
 const { getVariantAuditLog, getAllVariantAuditLog } = require('../controller/variantAuditController')
@@ -139,6 +140,16 @@ router.get('/shipment/:id', async (req, res, next) => {
 	}
 })
 
+
+// GET /api/admin/shipment-statuses
+router.get('/shipment-statuses', async (req, res, next) => {
+	try {
+		const data = await getShipmentStatus()
+		res.status(200).send(data)
+	} catch (error) {
+		next(error)
+	}
+})
 
 // PUT /api/admin/shipment/:id
 router.put('/shipment/:id', async (req, res, next) => {

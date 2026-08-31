@@ -1,11 +1,12 @@
 const axios = require('axios')
+const { getUpsBaseUrl } = require('./upsBaseUrl')
 
 async function getUpsToken() {
     const auth = Buffer.from(`${process.env.UPS_CLIENT_ID}:${process.env.UPS_CLIENT_SECRET}`).toString('base64')
 
     try {
         const response = await axios.post(
-            'https://wwwcie.ups.com/security/v1/oauth/token',
+            `${getUpsBaseUrl()}/security/v1/oauth/token`,
             'grant_type=client_credentials',
             {
                 headers: {

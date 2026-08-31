@@ -26,7 +26,6 @@ const palletInfoRouter = require('./palletInfoRouter');
 const priceRouter = require('./priceRouter');
 const productRouter = require('./productRouter');
 const r2Router = require('./r2Router');
-const shipmentRouter = require('./shipmentRouter');
 const specificationRouter = require('./specificationRouter');
 const subCategoryController = require('./subCategoryRouter');
 const userRouter = require('./userRouter');
@@ -80,7 +79,6 @@ api.use('/product', productRouter)
 api.use('/r2', r2Router)
 // S
 api.use('/search', searchRouter)
-api.use('/shipments',shipmentRouter)
 api.use('/shippingprofiles',shippingProfile)
 api.use('/specification', specificationRouter)
 api.use('/subcategory',subCategoryController)
