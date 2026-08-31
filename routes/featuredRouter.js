@@ -1,5 +1,5 @@
 const router = (module.exports = require('express').Router())
-const { getVariantsForFeatured, getFeaturedProduct, saveFeaturedProducts, editFeaturedProducts, deleteFeaturedProducts } = require('../controller/featuredController')
+const { getVariantsForFeatured, getFeaturedSources, getFeaturedProduct, saveFeaturedProducts, editFeaturedProducts, deleteFeaturedProducts } = require('../controller/featuredController')
 const AppError = require('../utils/appError')
 
 
@@ -15,6 +15,17 @@ router.get('/', async (req, res, next) => {
 	}
 })
 
+// Distinct source variants that already have FBT targets configured - must
+// stay ABOVE the /:id route below, or Express matches "sources" as :id first.
+// GET /api/featured/sources
+router.get('/sources', async (req, res, next) => {
+	try {
+		const data = await getFeaturedSources()
+		res.status(200).send(data)
+	} catch (error) {
+		next(error)
+	}
+})
 
 // Get featured
 // GET /api/featured/:id

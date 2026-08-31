@@ -2,26 +2,36 @@ const { Cart, User} = require('../db/models')
 const {where} = require("sequelize");
 
 
-// Merge Anonymous cart with user cart
-const mergeCart = async (user,cart)=>{
-    let userObject = await User.findOne({where:{id:user.id}, include:[{model:Cart}]})
+// Merge a guest (cookie) cart into the logged-in user's real DB cart -
+// called from GET /cart/ whenever the request carries a non-empty guest
+// cart, so items added before login aren't silently dropped once the DB
+// cart takes over. Existing lines keep the guest's quantity (last write
+// wins); new lines are appended.
+const mergeCart = async (user, cart) => {
+    let userObject = await User.findOne({where: {id: user.id}, include: [{model: Cart}]})
+
+    // Brand-new user with no cart row yet.
+    if (userObject.cartId === null) {
+        const newCart = await Cart.create({userId: userObject.id, productArray: []})
+        userObject.cartId = newCart.id
+        await userObject.save()
+    }
+
     let cartObject = await Cart.findOne({where: {id: userObject.cartId}})
-    console.log("merging carts!!!!", cart)
+    const productArray = cartObject.productArray || []
 
     for (let i = 0; i < cart.length; i++) {
-
-        const existingItem = cartObject.productArray.find(item => item.id === cart[i].id)
-        if(existingItem){
+        const existingItem = productArray.find(item => item.id === cart[i].id)
+        if (existingItem) {
             existingItem.quantity = cart[i].quantity
         } else {
-            cartObject.productArray.push(cart[i])
+            productArray.push(cart[i])
         }
     }
-    console.log(cartObject.productArray)
+    cartObject.productArray = productArray
     await cartObject.save();
 
     return cartObject.productArray
-
 }
 
 //Get cart of the user

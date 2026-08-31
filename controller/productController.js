@@ -21,6 +21,8 @@ const getProductDetails = async (productId) => {
             attributes: ["id", "url"],
           },
         ],
+        separate: true,
+        order: [["position", "ASC"]],
       },
       {
         model: Variant,

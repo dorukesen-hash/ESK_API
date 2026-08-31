@@ -1,5 +1,6 @@
 const { getShippingprofiles, saveShippingprofiles, editShippingprofiles, deleteShippingprofiles } = require('../controller/shippingProfile')
 const AppError = require('../utils/appError')
+const requireAuth = require('../middleware/requireAuth')
 
 const router = (module.exports = require('express').Router())
 
@@ -29,7 +30,7 @@ router.post('/', async (req, res, next) => {
 
 // Update shippingprofile
 // PUT /api/shippingprofiles/:id
-router.put('/:id', async (req, res, next) => {
+router.put('/:id', requireAuth, async (req, res, next) => {
     try {
         const {id} = req.params
         const addressInfo = req.body
@@ -47,7 +48,7 @@ router.put('/:id', async (req, res, next) => {
 
 // Delete shippingprofile
 // DELETE /api/shippingprofiles/:id
-router.delete('/:id', async (req, res, next) => {
+router.delete('/:id', requireAuth, async (req, res, next) => {
     try {
         const {id} = req.params
         console.log("deleting address:",id)

@@ -106,6 +106,9 @@ const getAccountInvoices = async (userId) => {
     try {
         const invoices = await Invoice.findAll({
             where: { userId },
+            // Order included so the FE can link to /invoices/pdf/:orderId -
+            // the PDF endpoint is keyed by order, not invoice.
+            include: [{ model: Order, attributes: ["id", "orderNumber"] }],
             order: [["createdAt", "DESC"]],
         });
 

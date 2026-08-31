@@ -4,11 +4,11 @@ const { createPaymentIntent, calculateTax } = require("../controller/stripeContr
 
 
 
-// Stripe payment intent creates secret for FE to secure payment.
+// Stripe payment intent creates secret for FE to secure payment. Amount is
+// computed server-side from req.body.items/shipping - see stripeController.
 router.post("/create-payment-intent", async (req, res, next) => {
     try {
-        console.log(req.body);
-        const data = await createPaymentIntent(req.body)
+        const data = await createPaymentIntent(req.body, req.user)
         res.status(200).send(data)
     } catch (error) {
         next(error)

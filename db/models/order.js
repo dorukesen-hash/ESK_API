@@ -100,6 +100,15 @@ const Order = db.define(
         trackingNumber: {
             type: Sequelize.STRING,
             allowNull: true,
+        },
+        stripePaymentIntentId: {
+            type: Sequelize.STRING,
+            allowNull: true,
+            unique: true,
+        },
+        discountAmount: {
+            type: Sequelize.DECIMAL(10, 2),
+            allowNull: true,
         }
     },
     {

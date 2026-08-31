@@ -11,6 +11,8 @@ const carrierRouter = require('./carrierRouter');
 const categoryRouter = require('./categoryRouter');
 const cookieRouter = require('./cookieRouter');
 const customerRouter = require('./customerRouter');
+const deciRouter = require('./deciRouter');
+const discountCodeRouter = require('./discountCodeRouter');
 const descriptionRouter = require('./descriptionRouter');
 const dimensionRouter = require('./dimensionRouter');
 const invoiceRouter = require('./invoiceRouter');
@@ -51,6 +53,8 @@ api.use('/category',  categoryRouter)
 api.use('/customer',  customerRouter)
 api.use('/cookie', cookieRouter)
 // D
+api.use('/deci', deciRouter)
+api.use('/discount-codes', discountCodeRouter)
 api.use('/description', descriptionRouter)
 api.use('/dimension', dimensionRouter)
 // F

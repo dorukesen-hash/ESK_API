@@ -24,7 +24,13 @@ router.get('/', async (req, res, next) => {
             return res.status(200).json(cart);
         }
 
-        const userCart = await getCartByUser(user.id);
+        // A non-empty cookie cart at this point was built up while logged
+        // out - merge it into the real DB cart instead of overwriting it,
+        // or it's silently lost the moment this request returns the DB
+        // cart's own (possibly empty) contents.
+        const userCart = cart.length > 0
+            ? await mergeCart(user, cart)
+            : await getCartByUser(user.id);
         res.cookie("userCart", JSON.stringify(userCart), cookieOptions);
         return res.status(200).json(userCart);
 

@@ -15,16 +15,18 @@ const AppError = require("../utils/appError");
 const { sequelize } = require("sequelize");
 const Description = require("../db/models/description");
 const Dimension = require("../db/models/dimensions");
+const { logVariantCreate } = require("./variantAuditController");
+const { getPricingOverrideInfo } = require("../utils/pricing");
 
 const getVariants = async () => {
   return await Variant.findAll();
 };
 
-const getVariant = async (id) => {
-  return await Variant.findOne({
+const getVariant = async (id, user) => {
+  const variant = await Variant.findOne({
   where: { id },
   include: [
-    { model: VariantImages, include: [{model: Image}] },
+    { model: VariantImages, include: [{model: Image}], separate: true, order: [["position", "ASC"]] },
     {
       model: Featured,
       as: "FPT",
@@ -39,11 +41,15 @@ const getVariant = async (id) => {
   ],
 });
 
+  if (!variant) return null;
+  const plain = variant.get({ plain: true });
+  plain.pricingOverride = await getPricingOverrideInfo(variant, user);
+  return plain;
 };
 
-const getVariantByIdList = async (ids) => {
+const getVariantByIdList = async (ids, user) => {
 
-  return await Variant.findAll({
+  const variants = await Variant.findAll({
     where: {
       id: ids,
     },
@@ -56,9 +62,19 @@ const getVariantByIdList = async (ids) => {
             attributes: ["id", "url"],
           },
         ],
+        separate: true,
+        order: [["position", "ASC"]],
       }
     ],
   });
+
+  return Promise.all(
+    variants.map(async (variant) => {
+      const plain = variant.get({ plain: true });
+      plain.pricingOverride = await getPricingOverrideInfo(variant, user);
+      return plain;
+    })
+  );
 };
 
 const getVariantOfProduct = async (id) => {
@@ -132,7 +148,7 @@ const deleteVariant = async (id) => {
   return await Variant.destroy({ where: { id: id } });
 };
 
-const uploadVariantExcel = async (hierarchyType, hierarchyId, fileBuffer) => {
+const uploadVariantExcel = async (hierarchyType, hierarchyId, fileBuffer, userId) => {
   const data = XLSX.read(fileBuffer.buffer, { type: "buffer" });
   const sheetName = data.SheetNames[0]; // Dinamik sheet adı
   let rowObject = XLSX.utils.sheet_to_json(data.Sheets[sheetName], {
@@ -341,7 +357,8 @@ const uploadVariantExcel = async (hierarchyType, hierarchyId, fileBuffer) => {
         variantData.productId = prodId;
       }
 
-      await Variant.create(variantData);
+      const created = await Variant.create(variantData);
+      await logVariantCreate(created.id, userId, created);
     } catch (error) {
       console.error("Hata:", line["Stock #"], error);
       throw new AppError(`Variant oluşturulamadı: ${line["Stock #"]}`, 500);

@@ -1,8 +1,19 @@
-const { Order, OrderItem, Customer, Shipment, OrderStatus, User, Cart, Invoice, Transaction, Variant, VariantImages, Image, Carrier } = require('../db/models')
+const models = require('../db/models')
+const { Order, OrderItem, Customer, Shipment, OrderStatus, User, Cart, Invoice, Transaction, Variant, VariantImages, Image, Carrier, DiscountCode, DiscountCodeRedemption } = models
 const { Op } = require('sequelize')
 const { createAndWhere } = require('./scopes');
 const Billing = require('../db/models/billing');
 const sendEmail = require('../utils/sendEmail');
+const AppError = require('../utils/appError');
+const { resolveVariantPrice, resolveOrderPricing } = require('../utils/pricing');
+const { logOrderChange } = require('./orderAuditController');
+const Stripe = require('stripe');
+const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
+
+// Matches the real orderstatus table (verified live: id 1-6 are Pending,
+// In Progress, Completed, On Hold, Cancelled, Refunded - same mapping
+// getOrders' status filter above already relies on).
+const REFUNDED_STATUS_ID = 6;
 
 function generateCustomUniqueId() {
   const now = new Date();
@@ -46,7 +57,7 @@ const getOrders = async (data) => {
   const whereConditions = [];
 
   if(status) {
-    if ( status === "New") {
+    if ( status === "Pending") {
       whereConditions.push({ orderstatusId : 1 });
     } else if (status === "In Progress") {
       whereConditions.push({ orderstatusId : 2 });
@@ -172,6 +183,12 @@ const getSingleOrder = async (id) => {
         attributes: [
           "extra_informations"
           ],
+      },
+      {
+        model: Billing,
+      },
+      {
+        model: Transaction,
       }
     ]
    })
@@ -180,38 +197,54 @@ const getSingleOrder = async (id) => {
 const updateOrder = async (id, data) => {
  const { billingAddress, shippingAddress, adminNote} = data;
 
- const  {name, firstline, secondline,city, state, zip, phone, email } = billingAddress;
+  // update or create billing address - billingAddress is optional, an order
+  // may be edited (e.g. just the admin note) without touching billing at all
+  if (billingAddress) {
+    const { name, firstline, secondline, city, state, zip, phone, email } = billingAddress;
 
-  // update or create billing address
-  if( billingAddress.id !== 0 ) {
+    if (billingAddress.id) {
       await Billing.update(billingAddress, { where: { id: billingAddress.id } });
-  } else {
-      await Billing.create({
+    } else {
+      const newBilling = await Billing.create({
         name, firstline, secondline, city, state, zip, phone, email
       });
+      await Order.update({ billingId: newBilling.id }, { where: { id } });
     }
+  }
 
  // Order update - shipping address
     await Order.update({...shippingAddress,extra_informations :{adminNote} }, { where: { id:id } });
 }
 
-const updateOrderStatus = async ( data) => {
+const updateOrderStatus = async (data, actorUserId) => {
 
   const order = await Order.findOne({where: { id: data.orderId}})
 
-  order.orderstatusId = parseInt(data.orderStatusId)
+  const oldStatusId = order.orderstatusId;
+  const newStatusId = parseInt(data.orderStatusId)
+  order.orderstatusId = newStatusId
 
   await order.save();
+
+  if (oldStatusId !== newStatusId) {
+    await logOrderChange({
+      orderId: order.id, actorUserId, action: 'status_change', field: 'orderstatusId', oldValue: oldStatusId, newValue: newStatusId,
+    });
+  }
 
  return order;
 
 }
 
-const completeOrder = async (data) => {
+const completeOrder = async (data, actorUserId) => {
 
-  const order = await Order.findOne({where: { id: data.orderId}}) 
+  const order = await Order.findOne({where: { id: data.orderId}})
 
-  if ( order.orderstatusId === 3  || order.shipmentId) {
+  // createOrder() always sets shipmentId at checkout time (a shipping-quote
+  // Shipment, not a fulfillment one), so checking shipmentId here made this
+  // a no-op for essentially every real order - only the status matters for
+  // "has this order already been marked complete."
+  if (order.orderstatusId === 3) {
       return;
   }
 
@@ -228,12 +261,48 @@ const completeOrder = async (data) => {
          tracking: data.trackingNumber
    })
 
+  const oldStatusId = order.orderstatusId;
   order.trackingNumber = data.trackingNumber;
   order.shipmentId = shipment.id;
   order.orderstatusId = 3;
   await order.save();
 
+  await logOrderChange({
+    orderId: order.id, actorUserId, action: 'status_change', field: 'orderstatusId', oldValue: oldStatusId, newValue: 3,
+  });
+
 }
+
+// Refunds the order's most recent successful payment via Stripe, using the
+// real PaymentIntent id recorded on the (correctly-linked, since Phase 0)
+// Transaction row - not something an admin can fake by just picking
+// "Refunded" from the status dropdown, which used to be all that action did.
+const refundOrder = async (orderId, actorUserId) => {
+  const order = await Order.findOne({ where: { id: orderId } });
+  if (!order) throw new AppError('Order not found.', 404);
+  if (!order.isPaid) throw new AppError('Order is not paid - nothing to refund.', 400);
+  if (order.orderstatusId === REFUNDED_STATUS_ID) throw new AppError('Order has already been refunded.', 400);
+
+  const transaction = await Transaction.findOne({ where: { orderId: order.id }, order: [['id', 'DESC']] });
+  if (!transaction || !transaction.payment_id) {
+    throw new AppError('No payment record found for this order - cannot refund.', 400);
+  }
+
+  const refund = await stripe.refunds.create({ payment_intent: transaction.payment_id });
+
+  const oldStatusId = order.orderstatusId;
+  order.orderstatusId = REFUNDED_STATUS_ID;
+  await order.save();
+
+  await logOrderChange({
+    orderId: order.id, actorUserId, action: 'refund', field: null, oldValue: transaction.payment_id, newValue: refund.id,
+  });
+  await logOrderChange({
+    orderId: order.id, actorUserId, action: 'status_change', field: 'orderstatusId', oldValue: oldStatusId, newValue: REFUNDED_STATUS_ID,
+  });
+
+  return { order, refund };
+};
 
 
 const createOrder = async (data) => {
@@ -241,8 +310,15 @@ const createOrder = async (data) => {
 
   const{ billing, items, recipient, shipping, paymentIntent}= order;
 
+  // Without a real PaymentIntent id there is no way for the webhook to ever
+  // reconcile/confirm this order later - refuse rather than create an order
+  // that can never be marked paid.
+  if (!paymentIntent?.id) {
+    throw new AppError('Missing payment confirmation.', 400);
+  }
+
   // Normalize payment amount from Stripe (amount in cents) to dollars
-  const amountCents = Number(paymentIntent?.amount) || 0;
+  const amountCents = Number(paymentIntent.amount) || 0;
   const amount = amountCents / 100;
 
   let foundUser;
@@ -289,16 +365,21 @@ const createOrder = async (data) => {
     });
   }
 
-  //CREATE TRANSACTION
-   await Transaction.create({
-    paymentId : paymentIntent.paymentIntentId || "",
-    amount: amount,
-    currency: paymentIntent.currency || "",
-    customerId: myCustomer.id,
-    status: paymentIntent.status || "",
-    description: paymentIntent.description || "",
-    paymentMethod: paymentIntent.paymentMethod || ""
-  })
+  // Transaction creation moved to confirmOrderPayment() (called from the
+  // Stripe webhook) - it's the only place we know for certain a payment was
+  // actually confirmed by Stripe, not just claimed by the client.
+
+  // Resolve the same discount (explicit code or an auto-applied first-order
+  // code) that create-payment-intent already used to compute the Stripe
+  // charge - purely to record which code applied and by how much; the
+  // charged/stored total itself still comes from the confirmed PaymentIntent
+  // amount below, not from this recomputation.
+  const { appliedDiscountCode, discountAmount } = await resolveOrderPricing({
+    items,
+    user: foundUser,
+    discountCode: order.discountCode,
+    models,
+  });
 
   //CREATE BILLING
 
@@ -314,8 +395,7 @@ const createOrder = async (data) => {
       })
 
   
- const carr = await Carrier.create({
-    name: shipping.carrier || ""})
+ const [carr] = await Carrier.findOrCreate({ where: { name: shipping.carrier || "" } });
 
   //CREATE SHIPPING
   const newShipping = await Shipment.create({
@@ -367,7 +447,12 @@ const createOrder = async (data) => {
     billingId:  newBilling.id,
   // store price in dollars
   price: amount,
-    isPaid: true,
+    // Only the Stripe webhook (confirmOrderPayment, once it verifies the
+    // charge actually succeeded) is allowed to flip this to true.
+    isPaid: false,
+    stripePaymentIntentId: paymentIntent.id,
+    discountCodeId: appliedDiscountCode ? appliedDiscountCode.id : null,
+    discountAmount: appliedDiscountCode ? discountAmount : null,
     closure: "open",
     userId: foundUser.id,
     orderstatusId: 1,
@@ -385,16 +470,47 @@ const createOrder = async (data) => {
 
     let imageUrl = variant.variant_images && variant.variant_images.length > 0 ? variant.variant_images[0]?.url : null
 
+    // Server-computed price (per-customer override / discount, or the
+    // tiered price) is the source of truth for the stored record. OrderItem
+    // .price is a LINE TOTAL (unit price * quantity) - matches what the FE's
+    // calculatePrice() has always sent, not a per-unit price - so the
+    // resolver's per-unit result is multiplied by quantity before comparing/
+    // storing. Client-submitted element.price is only compared against it
+    // for a mismatch warning - by this point in checkout the Stripe charge
+    // has typically already been captured using the client's number (see
+    // utils/pricing.js and the PR notes for why the actual charge amount
+    // isn't touched here).
+    const resolvedUnitPrice = await resolveVariantPrice(variant, element.quantity, foundUser);
+    const resolvedTotal = resolvedUnitPrice != null ? resolvedUnitPrice * element.quantity : null;
+    if (resolvedTotal != null && Number(resolvedTotal).toFixed(2) !== Number(element.price).toFixed(2)) {
+      console.warn(
+        `Order price mismatch: variant ${variant.id}, user ${foundUser?.id ?? 'guest'} - client sent ${element.price}, server resolved ${resolvedTotal}`
+      );
+    }
+    const finalPrice = resolvedTotal != null ? resolvedTotal : element.price;
+
   const createdItem = await OrderItem.create({
       title: variant.title,
       code: variant.stock,
-      price: element.price,
+      price: finalPrice,
       quantity: element.quantity,
       orderId: newOrder.id,
       imgurl: imageUrl,
-      variantId: element.id
+      // The Sequelize association uses this exact string as the JS
+      // attribute name (Variant.hasMany(OrderItem, {foreignKey:
+      // 'variant_id'})) - "variantId" would silently be dropped.
+      variant_id: element.id
     });
   orderItems.push(createdItem);
+  }
+
+  if (appliedDiscountCode) {
+    await DiscountCode.increment('timesUsed', { by: 1, where: { id: appliedDiscountCode.id } });
+    await DiscountCodeRedemption.create({
+      discountCodeId: appliedDiscountCode.id,
+      userId: foundUser.id,
+      orderId: newOrder.id,
+    });
   }
 
   let itemsx = orderItems.map(item => ({
@@ -433,14 +549,62 @@ const createOrder = async (data) => {
   }
 
   return "Order created successfully!"
-  
+
+};
+
+// Called only from the Stripe webhook handler once Stripe itself confirms a
+// payment_intent.succeeded event - this is the one place an Order actually
+// gets marked paid, and the one place a real Transaction row gets created.
+// Idempotent: webhooks can and do redeliver the same event.
+const confirmOrderPayment = async (stripePaymentIntent) => {
+  const order = await Order.findOne({ where: { stripePaymentIntentId: stripePaymentIntent.id } });
+  if (!order) {
+    console.warn(`Webhook: no order found for PaymentIntent ${stripePaymentIntent.id}`);
+    return;
+  }
+  if (order.isPaid) {
+    return; // already confirmed - duplicate webhook delivery
+  }
+
+  order.isPaid = true;
+  await order.save();
+
+  await Transaction.create({
+    payment_id: stripePaymentIntent.id,
+    customer_id: order.customerId != null ? String(order.customerId) : null,
+    amount: (Number(stripePaymentIntent.amount) || 0) / 100,
+    currency: stripePaymentIntent.currency || '',
+    status: stripePaymentIntent.status || '',
+    payment_method: stripePaymentIntent.payment_method || '',
+    orderId: order.id,
+  });
+
+  // The Invoice model exists but nothing ever created a row - do it here,
+  // the one place we know for certain payment actually went through.
+  const now = new Date().toISOString();
+  const invoice = await Invoice.create({
+    userId: order.userId,
+    documentNumber: `INV-${order.orderNumber}`,
+    issueDate: now,
+    paymentDate: now,
+    grandTotal: order.price,
+    grandTotalInclVat: order.price,
+    paymentTotal: order.price,
+    paymentType: 'card',
+    paymentPlatform: 'stripe',
+    description: `Invoice for Order #${order.orderNumber}`,
+  });
+  order.invoiceId = invoice.id;
+  await order.save();
 };
 
 module.exports = {
     getOrders,
     createOrder,
+    confirmOrderPayment,
     getSingleOrder,
     updateOrder,
     updateOrderStatus,
-    completeOrder
+    completeOrder,
+    refundOrder
 }

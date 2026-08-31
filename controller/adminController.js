@@ -11,6 +11,7 @@ const {
 } = require("../db/models");
 const Description = require("../db/models/description");
 const { createAndWhere } = require("./scopes");
+const { logVariantFieldChanges, logVariantDelete } = require("./variantAuditController");
 
 //ADMIN -PRODUCTS - CATEGORIES TAB / GET ALL
 const getCategoriesforAdmin = async () => {
@@ -60,7 +61,7 @@ const getSubCategoriesforAdmin = async (searchItem) => {
       },
       { model: Variant, attributes: ["id", "title", "stock"] },
       { model: Product, attributes: ["id", "title"] },
-      { model: SubcategoryImages, include: [{ model: Image }] },
+      { model: SubcategoryImages, include: [{ model: Image }], separate: true, order: [["position", "ASC"]] },
     ],
   });
 };
@@ -127,36 +128,39 @@ const updateSubCategoryAdmin = async (data) => {
       { where: { id: id } }
     );
 
-    // 2. Variant Güncelleme
-    const existingVariants = await Variant.findAll({
-      where: { subcategoryId: id }
-    });
+    // 2. Variant Güncelleme - variants is optional; omitting it (or sending
+    // undefined) must leave existing variants untouched, not wipe them.
+    if (variants) {
+      const existingVariants = await Variant.findAll({
+        where: { subcategoryId: id }
+      });
 
-    const incomingVariantIds = variants.map((v) => v.id).filter(Boolean); // id si olanları al
-    const existingVariantIds = existingVariants.map((v) => v.id);
+      const incomingVariantIds = variants.map((v) => v.id).filter(Boolean); // id si olanları al
+      const existingVariantIds = existingVariants.map((v) => v.id);
 
-    // Silinmesi gereken varyantları bul (DB'de var ama gönderilen listede yok)
-    const variantsToDelete = existingVariantIds.filter(
-      (id) => !incomingVariantIds.includes(id)
-    );
-    await Variant.destroy({ where: { id: variantsToDelete } });
+      // Silinmesi gereken varyantları bul (DB'de var ama gönderilen listede yok)
+      const variantsToDelete = existingVariantIds.filter(
+        (id) => !incomingVariantIds.includes(id)
+      );
+      await Variant.destroy({ where: { id: variantsToDelete } });
 
-    for (const variant of variants) {
-      if (!variant.id) {
-        // Yeni varyant ekle
-        await Variant.create(
-          { ...variant, subcategoryId: id, categoryId: data.categoryId }
-        );
-      } else {
-        // Mevcut varyantı güncelle
-        await Variant.update(
-          {
-            title: variant.title,
-            sku: variant.sku,
-            stockLevel: variant.stockLevel,
-          },
-          { where: { id: variant.id } }
-        );
+      for (const variant of variants) {
+        if (!variant.id) {
+          // Yeni varyant ekle
+          await Variant.create(
+            { ...variant, subcategoryId: id, categoryId: data.categoryId }
+          );
+        } else {
+          // Mevcut varyantı güncelle
+          await Variant.update(
+            {
+              title: variant.title,
+              sku: variant.sku,
+              stockLevel: variant.stockLevel,
+            },
+            { where: { id: variant.id } }
+          );
+        }
       }
     }
 
@@ -194,7 +198,7 @@ const getProductsforAdmin = async (searchItem) => {
       { model: Category, attributes: ["id", "name"] },
       { model: Subcategory, attributes: ["id", "name"] },
       { model: Variant, attributes: ["id", "title", "stock"] },
-      { model: ProductImages, include: [{ model: Image }] },
+      { model: ProductImages, include: [{ model: Image }], separate: true, order: [["position", "ASC"]] },
     ],
   });
 };
@@ -243,46 +247,58 @@ const updateProductAdmin = async (data) => {
 
   try {
 
-    await Product.update({
+    const productFields = {
       title: title,
       sku: sku,
       available: available,
       description: description,
-      extradata: list_items
-    },{ where: { id: id } });
+    };
+    // list_items is optional; omitting it must leave existing extradata
+    // untouched (ProductFormModal used to always send [], silently wiping
+    // any real bullet-point content on every unrelated edit - same class of
+    // bug as the variants-array one below, fixed the same way).
+    if (list_items !== undefined) {
+      productFields.extradata = list_items;
+    }
 
-    const existingVariants = await Variant.findAll({
-      where: { productId: id },
-    });
+    await Product.update(productFields, { where: { id: id } });
 
-    const incomingVariantIds = variants.map((v) => v.id).filter(Boolean); // id si olanları al
-    const existingVariantIds = existingVariants.map((v) => v.id);
+    // variants is optional; omitting it (or sending undefined) must leave
+    // existing variants untouched, not wipe them.
+    if (variants) {
+      const existingVariants = await Variant.findAll({
+        where: { productId: id },
+      });
 
-    // Silinmesi gereken varyantları bul (DB'de var ama gönderilen listede yok)
-    const variantsToDelete = existingVariantIds.filter(
-      (id) => !incomingVariantIds.includes(id)
-    );
-    await Variant.destroy({ where: { id: variantsToDelete } });
+      const incomingVariantIds = variants.map((v) => v.id).filter(Boolean); // id si olanları al
+      const existingVariantIds = existingVariants.map((v) => v.id);
 
-    for (const variant of variants) {
-      if (!variant.id) {
-        // Yeni varyant ekle
-        await Variant.create({
-          ...variant,
-          categoryId: data.categoryId,
-          subcategoryId: data.subcategoryId,
-          productId: id,
-        });
-      } else {
-        // Mevcut varyantı güncelle
-        await Variant.update(
-          {
-            title: variant.title,
-            sku: variant.sku,
-            stockLevel: variant.stockLevel,
-          },
-          { where: { id: variant.id } }
-        );
+      // Silinmesi gereken varyantları bul (DB'de var ama gönderilen listede yok)
+      const variantsToDelete = existingVariantIds.filter(
+        (id) => !incomingVariantIds.includes(id)
+      );
+      await Variant.destroy({ where: { id: variantsToDelete } });
+
+      for (const variant of variants) {
+        if (!variant.id) {
+          // Yeni varyant ekle
+          await Variant.create({
+            ...variant,
+            categoryId: data.categoryId,
+            subcategoryId: data.subcategoryId,
+            productId: id,
+          });
+        } else {
+          // Mevcut varyantı güncelle
+          await Variant.update(
+            {
+              title: variant.title,
+              sku: variant.sku,
+              stockLevel: variant.stockLevel,
+            },
+            { where: { id: variant.id } }
+          );
+        }
       }
     }
 
@@ -300,7 +316,7 @@ const deleteProductAdmin = async (id) => {
 };
 
 const getVariantsForAdmin = async (data) => {
-  const { limit, page, globalFilter, sorting } = data;
+  const { limit, page, globalFilter, sorting, categoryId, subcategoryId, productId } = data;
 
   const limitx = parseInt(limit ? limit : 10);
   const offset = parseInt(page ? page : 0) * limit;
@@ -325,6 +341,18 @@ const getVariantsForAdmin = async (data) => {
     });
   }
 
+  // categoryId/subcategoryId are denormalized ancestor pointers set on every
+  // descendant variant (a variant under a product still carries its
+  // grandparent subcategoryId/categoryId), so a level's "direct" variants
+  // must exclude rows that actually belong to a deeper level.
+  if (productId) {
+    opt.push({ productId: parseInt(productId) });
+  } else if (subcategoryId) {
+    opt.push({ subcategoryId: parseInt(subcategoryId), productId: null });
+  } else if (categoryId) {
+    opt.push({ categoryId: parseInt(categoryId), subcategoryId: null });
+  }
+
   return await Variant.findAndCountAll({
     limit: limitx,
     offset: offset,
@@ -341,27 +369,47 @@ const getVariantsForAdmin = async (data) => {
       {
         model: Product,
       },
-      { model: VariantImages, include: [{ model: Image }] },
+      { model: VariantImages, include: [{ model: Image }], separate: true, order: [["position", "ASC"]] },
     ],
   });
 };
 
 const addVariantForAdmin = async (data) => {};
 
-const updateVariantForAdmin = async (data) => {
+const updateVariantForAdmin = async (data, userId) => {
+  const { id, ...fields } = data;
+
+  const existing = await Variant.findByPk(id);
+  await logVariantFieldChanges(id, userId, existing, fields);
 
   await Variant.update(
     {
-      ...data
+      ...fields
     },
-    { where: { id: data.id } }
+    { where: { id } }
   );
 
   return { success: true, message: "Variant updated successfully" };
 };
 
-const deleteVariantForAdmin = async (id) => {
+const deleteVariantForAdmin = async (id, userId) => {
+  const existing = await Variant.findByPk(id);
+  if (existing) {
+    await logVariantDelete(id, userId, existing);
+  }
   return await Variant.destroy({ where: { id } });
+};
+
+// Admin-curated "Featured" list - a variant is either featured or not
+// (`featured` boolean), ordered by `featured_position` for the homepage grid.
+const getFeaturedVariantsForAdmin = async () => {
+  return await Variant.findAll({
+    where: { featured: true },
+    order: [
+      ["featured_position", "ASC"],
+      ["id", "ASC"],
+    ],
+  });
 };
 
 module.exports = {
@@ -381,4 +429,5 @@ module.exports = {
   addVariantForAdmin,
   updateVariantForAdmin,
   deleteVariantForAdmin,
+  getFeaturedVariantsForAdmin,
 };
