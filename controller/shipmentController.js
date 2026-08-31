@@ -1,5 +1,5 @@
 const { Op } = require('sequelize');
-const { Shipment, Carrier } = require('../db/models');
+const { Shipment, Carrier, ShipmentStatus } = require('../db/models');
 const { createAndWhere } = require('./scopes');
 
 const getShipments = async (data) => {
@@ -45,30 +45,37 @@ const getShipments = async (data) => {
     order,
     where: createAndWhere(whereConditions),
     distinct: true,
-    include: [ 
+    include: [
        {
         model: Carrier
+        },
+       {
+        model: ShipmentStatus
         }]
 
    })
 
-   return result;  
+   return result;
 }
 
 const getSingleShipment = async (id) => {
       return await Shipment.findOne({
       where: { id: id},
        include: [
-          {model: Carrier}]})
+          {model: Carrier},
+          {model: ShipmentStatus}]})
 }
 
 const updateShipment  = async (id, data) => {
-    const {tracking, adminNote} = data;
+    const {tracking, adminNote, shipmentstatusId} = data;
 
   const shipment =  await Shipment.findOne({where: {id}})
 
   shipment.tracking = tracking;
   shipment.extra_informations = {adminNote: adminNote}
+  if (shipmentstatusId !== undefined) {
+    shipment.shipmentstatusId = shipmentstatusId || null;
+  }
   await shipment.save();
 
 }

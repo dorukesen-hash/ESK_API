@@ -248,18 +248,31 @@ const completeOrder = async (data, actorUserId) => {
       return;
   }
 
-  const shipment = await Shipment.create({
-         name: order.name || "",
-         firstline: order.firstline || "",
-         secondline: order.secondline || "",
-         email: order.email || "",
-         phone: order.phone || "",
-         city: order.city || "",
-         state: order.state || "",
-         zip: order.zip,
-         carrierId: data.carrierId,
-         tracking: data.trackingNumber
-   })
+  // Update the SAME Shipment row createOrder() created at checkout time
+  // (order.shipmentId is always set by then) instead of creating a second
+  // one and repointing order.shipmentId at it - that used to silently
+  // orphan the original row (with its real deci/weight/address quote data)
+  // the moment an order was fulfilled.
+  let shipment = order.shipmentId ? await Shipment.findByPk(order.shipmentId) : null;
+  if (!shipment) {
+    shipment = await Shipment.create({
+           name: order.name || "",
+           firstline: order.firstline || "",
+           secondline: order.secondline || "",
+           email: order.email || "",
+           phone: order.phone || "",
+           city: order.city || "",
+           state: order.state || "",
+           zip: order.zip,
+    });
+  }
+  shipment.carrierId = data.carrierId;
+  shipment.tracking = data.trackingNumber;
+  shipment.userId = order.userId;
+  if (data.shipmentstatusId != null) {
+    shipment.shipmentstatusId = data.shipmentstatusId;
+  }
+  await shipment.save();
 
   const oldStatusId = order.orderstatusId;
   order.trackingNumber = data.trackingNumber;
@@ -411,7 +424,8 @@ const createOrder = async (data) => {
     totalDeci : shipping.totalDeci || 0,
     totalWeight: shipping.totalWeight || 0,
     totalPrice: shipping.price || 0,
-    carrierId: carr.id
+    carrierId: carr.id,
+    userId: foundUser.id
     })
 
   // En son orderNumber'ı bul

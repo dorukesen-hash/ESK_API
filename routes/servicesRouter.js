@@ -2,6 +2,7 @@ const express = require("express");
 const axios = require("axios");
 const getUpsToken = require("../utils/getUpsToken");
 const findState = require("../utils/findState");
+const { getUpsBaseUrl } = require("../utils/upsBaseUrl");
 
 const router = express.Router();
 
@@ -58,7 +59,7 @@ router.post("/shipping-options", async (req, res) => {
       Object.entries(serviceCodes).map(async ([code, name]) => {
         console.log(name);
         const response = await axios.post(
-          "https://wwwcie.ups.com/api/rating/v1/Rate",
+          `${getUpsBaseUrl()}/api/rating/v1/Rate`,
           {
             RateRequest: {
               Request: { RequestOption: "Rate" },
@@ -141,7 +142,7 @@ router.post("/sending-options", async (req, res) => {
           const response = await axios.put(
     "https://www.taibeta.net/PublicAPI/Shipping/getRateQuote",
     {
-      authenticationKey: "82f5d0ef-c164-05ff-57e9-706a24fc9764",
+      authenticationKey: process.env.TAIBETA_API_KEY,
       originZipCode: "11501",
       destinationZipCode: recipient?.PostalCode,
       Commodities: [
@@ -194,7 +195,7 @@ router.post("/combined-shipping-options", async (req, res) => {
           const results = await Promise.allSettled(
             Object.entries(serviceCodes).map(async ([code, name]) => {
               const response = await axios.post(
-                "https://wwwcie.ups.com/api/rating/v1/Rate",
+                `${getUpsBaseUrl()}/api/rating/v1/Rate`,
                 {
                   RateRequest: {
                     Request: { RequestOption: "Rate" },
@@ -263,7 +264,7 @@ router.post("/combined-shipping-options", async (req, res) => {
           const response = await axios.put(
             "https://www.taibeta.net/PublicAPI/Shipping/getRateQuote",
             {
-              authenticationKey: "82f5d0ef-c164-05ff-57e9-706a24fc9764",
+              authenticationKey: process.env.TAIBETA_API_KEY,
               originZipCode: "75082",
               originState:"TX",
               originCountry: 1,
