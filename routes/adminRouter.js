@@ -8,6 +8,7 @@ const { getPricingAuditLogForUser } = require('../controller/pricingAuditControl
 const { deleteImageConnections } = require('../controller/imageController')
 const { getOrders, getSingleOrder, updateOrder, updateOrderStatus, completeOrder, refundOrder } = require('../controller/orderController')
 const { getOrderAuditLog } = require('../controller/orderAuditController')
+const { getInvoicesForAdmin } = require('../controller/invoiceController')
 const { getShipments, getSingleShipment, updateShipment } = require('../controller/shipmentController')
 const { uploadVariantExcel } = require('../controller/variantController')
 const { exportVariantsExcel, bulkImportVariantsExcel } = require('../controller/variantBulkController')
@@ -517,6 +518,17 @@ router.get('/variant/:id/audit-log', async (req, res, next) => {
 router.get('/variant-audit-log', async (req, res, next) => {
 	try {
 		const data = await getAllVariantAuditLog(req.query)
+		res.status(200).send(data)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// INVOICES
+// GET /api/admin/invoices
+router.get('/invoices', async (req, res, next) => {
+	try {
+		const data = await getInvoicesForAdmin(req.query)
 		res.status(200).send(data)
 	} catch (error) {
 		next(error)

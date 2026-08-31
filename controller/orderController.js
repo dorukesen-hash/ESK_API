@@ -578,6 +578,24 @@ const confirmOrderPayment = async (stripePaymentIntent) => {
     payment_method: stripePaymentIntent.payment_method || '',
     orderId: order.id,
   });
+
+  // The Invoice model exists but nothing ever created a row - do it here,
+  // the one place we know for certain payment actually went through.
+  const now = new Date().toISOString();
+  const invoice = await Invoice.create({
+    userId: order.userId,
+    documentNumber: `INV-${order.orderNumber}`,
+    issueDate: now,
+    paymentDate: now,
+    grandTotal: order.price,
+    grandTotalInclVat: order.price,
+    paymentTotal: order.price,
+    paymentType: 'card',
+    paymentPlatform: 'stripe',
+    description: `Invoice for Order #${order.orderNumber}`,
+  });
+  order.invoiceId = invoice.id;
+  await order.save();
 };
 
 module.exports = {

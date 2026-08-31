@@ -1,4 +1,4 @@
-const { Invoice, Shipment } = require('../db/models');
+const { Invoice, Shipment, User, Order } = require('../db/models');
 const { default: puppeteer } = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
@@ -8,6 +8,22 @@ const path = require('path');
 const getInvoices = async () => {
     return await Invoice.findAll()
 }
+
+// Admin invoice list - GET /api/admin/invoices
+const getInvoicesForAdmin = async ({ page = 0, limit = 50 } = {}) => {
+    const limitNum = parseInt(limit) || 50;
+    const offsetNum = (parseInt(page) || 0) * limitNum;
+
+    return await Invoice.findAndCountAll({
+        include: [
+            { model: User, attributes: ['id', 'name', 'surname', 'email'] },
+            { model: Order, attributes: ['id', 'orderNumber'] },
+        ],
+        order: [['createdAt', 'DESC']],
+        limit: limitNum,
+        offset: offsetNum,
+    });
+};
 
 
 // ...existing code...
@@ -63,10 +79,7 @@ function renderInvoiceHTML(invoice) {
     <div class="section">
         <h3>Invoice Details</h3>
        <p><strong>Invoice No:</strong> ${invoice.invoice_no}<br>
-           <strong>Invoice Date:</strong> ${formatDateUS(invoice.invoice_date)}<br>
-             <strong>PO #:</strong> ${invoice.po_no}<br>
-             <strong>Terms:</strong> ${invoice.terms}<br>
-             <strong>Quantity of Pallet:</strong> ${invoice.pallet_quantity}</p>
+           <strong>Invoice Date:</strong> ${formatDateUS(invoice.invoice_date)}</p>
     </div>
 
     <div class="address-row">
@@ -130,7 +143,7 @@ function renderInvoiceHTML(invoice) {
     return html;
 }
 
-const { Order, OrderItem } = require('../db/models');
+const { OrderItem } = require('../db/models');
 
 const generateInvoicePDF = async (orderId) => {
     // Fetch order and order items from DB
@@ -189,13 +202,16 @@ const generateInvoicePDF = async (orderId) => {
         logoBase64 = '';
     }
 
+    // Real Invoice row (auto-created by confirmOrderPayment once payment
+    // is confirmed - see orderController.js). Older/unpaid orders may not
+    // have one yet; fall back to the order's own id/date rather than
+    // fabricating invoice_no/date, matching prior (if incorrect) behavior.
+    const invoiceRecord = order.invoiceId ? await Invoice.findByPk(order.invoiceId) : null;
+
     // Build invoice data
     const invoice = {
-        invoice_no: order.invoice_no || order.id,
-        invoice_date: order.invoice_date || order.createdAt,
-        po_no: order.po_no || '',
-        terms: order.terms || '',
-        pallet_quantity: order.pallet_quantity || '',
+        invoice_no: invoiceRecord?.documentNumber || order.id,
+        invoice_date: invoiceRecord?.issueDate || order.createdAt,
         logo: logoBase64, // Embedded base64 logo
         bill_to: {
             name: billing?.name || order.bill_to?.name || 'Customer Name',
@@ -243,5 +259,6 @@ const generateInvoicePDF = async (orderId) => {
 
 module.exports = {
     getInvoices,
+    getInvoicesForAdmin,
     generateInvoicePDF
 };
