@@ -6,6 +6,14 @@ const Billing = require('../db/models/billing');
 const sendEmail = require('../utils/sendEmail');
 const AppError = require('../utils/appError');
 const { resolveVariantPrice, resolveOrderPricing } = require('../utils/pricing');
+const { logOrderChange } = require('./orderAuditController');
+const Stripe = require('stripe');
+const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
+
+// Matches the real orderstatus table (verified live: id 1-6 are Pending,
+// In Progress, Completed, On Hold, Cancelled, Refunded - same mapping
+// getOrders' status filter above already relies on).
+const REFUNDED_STATUS_ID = 6;
 
 function generateCustomUniqueId() {
   const now = new Date();
@@ -178,6 +186,9 @@ const getSingleOrder = async (id) => {
       },
       {
         model: Billing,
+      },
+      {
+        model: Transaction,
       }
     ]
    })
@@ -205,19 +216,27 @@ const updateOrder = async (id, data) => {
     await Order.update({...shippingAddress,extra_informations :{adminNote} }, { where: { id:id } });
 }
 
-const updateOrderStatus = async ( data) => {
+const updateOrderStatus = async (data, actorUserId) => {
 
   const order = await Order.findOne({where: { id: data.orderId}})
 
-  order.orderstatusId = parseInt(data.orderStatusId)
+  const oldStatusId = order.orderstatusId;
+  const newStatusId = parseInt(data.orderStatusId)
+  order.orderstatusId = newStatusId
 
   await order.save();
+
+  if (oldStatusId !== newStatusId) {
+    await logOrderChange({
+      orderId: order.id, actorUserId, action: 'status_change', field: 'orderstatusId', oldValue: oldStatusId, newValue: newStatusId,
+    });
+  }
 
  return order;
 
 }
 
-const completeOrder = async (data) => {
+const completeOrder = async (data, actorUserId) => {
 
   const order = await Order.findOne({where: { id: data.orderId}})
 
@@ -242,12 +261,48 @@ const completeOrder = async (data) => {
          tracking: data.trackingNumber
    })
 
+  const oldStatusId = order.orderstatusId;
   order.trackingNumber = data.trackingNumber;
   order.shipmentId = shipment.id;
   order.orderstatusId = 3;
   await order.save();
 
+  await logOrderChange({
+    orderId: order.id, actorUserId, action: 'status_change', field: 'orderstatusId', oldValue: oldStatusId, newValue: 3,
+  });
+
 }
+
+// Refunds the order's most recent successful payment via Stripe, using the
+// real PaymentIntent id recorded on the (correctly-linked, since Phase 0)
+// Transaction row - not something an admin can fake by just picking
+// "Refunded" from the status dropdown, which used to be all that action did.
+const refundOrder = async (orderId, actorUserId) => {
+  const order = await Order.findOne({ where: { id: orderId } });
+  if (!order) throw new AppError('Order not found.', 404);
+  if (!order.isPaid) throw new AppError('Order is not paid - nothing to refund.', 400);
+  if (order.orderstatusId === REFUNDED_STATUS_ID) throw new AppError('Order has already been refunded.', 400);
+
+  const transaction = await Transaction.findOne({ where: { orderId: order.id }, order: [['id', 'DESC']] });
+  if (!transaction || !transaction.payment_id) {
+    throw new AppError('No payment record found for this order - cannot refund.', 400);
+  }
+
+  const refund = await stripe.refunds.create({ payment_intent: transaction.payment_id });
+
+  const oldStatusId = order.orderstatusId;
+  order.orderstatusId = REFUNDED_STATUS_ID;
+  await order.save();
+
+  await logOrderChange({
+    orderId: order.id, actorUserId, action: 'refund', field: null, oldValue: transaction.payment_id, newValue: refund.id,
+  });
+  await logOrderChange({
+    orderId: order.id, actorUserId, action: 'status_change', field: 'orderstatusId', oldValue: oldStatusId, newValue: REFUNDED_STATUS_ID,
+  });
+
+  return { order, refund };
+};
 
 
 const createOrder = async (data) => {
@@ -532,5 +587,6 @@ module.exports = {
     getSingleOrder,
     updateOrder,
     updateOrderStatus,
-    completeOrder
+    completeOrder,
+    refundOrder
 }

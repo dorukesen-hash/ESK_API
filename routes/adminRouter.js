@@ -6,7 +6,8 @@ const { saveShippingprofiles } = require('../controller/shippingProfile')
 const { getSpecialPricesForUser, upsertSpecialPrice, deleteSpecialPrice } = require('../controller/specialPriceController')
 const { getPricingAuditLogForUser } = require('../controller/pricingAuditController')
 const { deleteImageConnections } = require('../controller/imageController')
-const { getOrders, getSingleOrder, updateOrder, updateOrderStatus, completeOrder } = require('../controller/orderController')
+const { getOrders, getSingleOrder, updateOrder, updateOrderStatus, completeOrder, refundOrder } = require('../controller/orderController')
+const { getOrderAuditLog } = require('../controller/orderAuditController')
 const { getShipments, getSingleShipment, updateShipment } = require('../controller/shipmentController')
 const { uploadVariantExcel } = require('../controller/variantController')
 const { exportVariantsExcel, bulkImportVariantsExcel } = require('../controller/variantBulkController')
@@ -64,7 +65,7 @@ router.put('/orders/:id', async (req, res, next) => {
 // POST /api/admin/orders/status/
 router.post('/orders/status/', async (req, res, next) => {
 	try {
-		const data = await updateOrderStatus(req.body)
+		const data = await updateOrderStatus(req.body, req.user?.id)
 		res.status(200).send(data)
 	} catch (error) {
 		next(error)
@@ -74,7 +75,29 @@ router.post('/orders/status/', async (req, res, next) => {
 // POST /api/admin/orders/complete/
 router.post('/orders/complete/', async (req, res, next) => {
 	try {
-		const data = await completeOrder(req.body)
+		const data = await completeOrder(req.body, req.user?.id)
+		res.status(200).send(data)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// POST /api/admin/orders/:id/refund
+router.post('/orders/:id/refund', async (req, res, next) => {
+	try {
+		const { id } = req.params
+		const data = await refundOrder(id, req.user?.id)
+		res.status(200).send(data)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// GET /api/admin/orders/:id/audit-log
+router.get('/orders/:id/audit-log', async (req, res, next) => {
+	try {
+		const { id } = req.params
+		const data = await getOrderAuditLog(id)
 		res.status(200).send(data)
 	} catch (error) {
 		next(error)

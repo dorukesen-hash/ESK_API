@@ -37,6 +37,7 @@ const VariantAuditLog = require('./variantAuditLog')
 const DiscountCode = require('./discountCode')
 const DiscountCodeRedemption = require('./discountCodeRedemption')
 const PricingAuditLog = require('./pricingAuditLog')
+const OrderAuditLog = require('./orderAuditLog')
 
 
 User.hasMany(Category);
@@ -223,6 +224,14 @@ PricingAuditLog.belongsTo(User, { as: 'actor', foreignKey: 'actorUserId' })
 Variant.hasMany(PricingAuditLog, { foreignKey: 'variantId' })
 PricingAuditLog.belongsTo(Variant, { foreignKey: 'variantId' })
 
+// Order audit log (status changes + refunds). constraints: false - see the
+// identical note on DiscountCode<->Order above: the live "order" table's id
+// column has no PK/unique constraint, so a real FK to it fails at sync time.
+Order.hasMany(OrderAuditLog, { constraints: false })
+OrderAuditLog.belongsTo(Order, { constraints: false })
+User.hasMany(OrderAuditLog, { as: 'orderAuditActions', foreignKey: 'actorUserId' })
+OrderAuditLog.belongsTo(User, { as: 'actor', foreignKey: 'actorUserId' })
+
 
 module.exports = {
 		User,
@@ -263,5 +272,6 @@ module.exports = {
 		VariantAuditLog,
 		DiscountCode,
 		DiscountCodeRedemption,
-		PricingAuditLog
+		PricingAuditLog,
+		OrderAuditLog
 	};
