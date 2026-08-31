@@ -16,13 +16,14 @@ const { sequelize } = require("sequelize");
 const Description = require("../db/models/description");
 const Dimension = require("../db/models/dimensions");
 const { logVariantCreate } = require("./variantAuditController");
+const { getPricingOverrideInfo } = require("../utils/pricing");
 
 const getVariants = async () => {
   return await Variant.findAll();
 };
 
-const getVariant = async (id) => {
-  return await Variant.findOne({
+const getVariant = async (id, user) => {
+  const variant = await Variant.findOne({
   where: { id },
   include: [
     { model: VariantImages, include: [{model: Image}], separate: true, order: [["position", "ASC"]] },
@@ -40,11 +41,15 @@ const getVariant = async (id) => {
   ],
 });
 
+  if (!variant) return null;
+  const plain = variant.get({ plain: true });
+  plain.pricingOverride = await getPricingOverrideInfo(variant, user);
+  return plain;
 };
 
-const getVariantByIdList = async (ids) => {
+const getVariantByIdList = async (ids, user) => {
 
-  return await Variant.findAll({
+  const variants = await Variant.findAll({
     where: {
       id: ids,
     },
@@ -62,6 +67,14 @@ const getVariantByIdList = async (ids) => {
       }
     ],
   });
+
+  return Promise.all(
+    variants.map(async (variant) => {
+      const plain = variant.get({ plain: true });
+      plain.pricingOverride = await getPricingOverrideInfo(variant, user);
+      return plain;
+    })
+  );
 };
 
 const getVariantOfProduct = async (id) => {

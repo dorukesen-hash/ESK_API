@@ -3,6 +3,7 @@ const { Op } = require('sequelize')
 const { createAndWhere } = require('./scopes');
 const Billing = require('../db/models/billing');
 const sendEmail = require('../utils/sendEmail');
+const { resolveVariantPrice } = require('../utils/pricing');
 
 function generateCustomUniqueId() {
   const now = new Date();
@@ -392,10 +393,24 @@ const createOrder = async (data) => {
 
     let imageUrl = variant.variant_images && variant.variant_images.length > 0 ? variant.variant_images[0]?.url : null
 
+    // Server-computed price (per-customer override / discount, or the
+    // tiered price) is the source of truth for the stored record. Client-
+    // submitted element.price is only compared against it for a mismatch
+    // warning - by this point in checkout the Stripe charge has typically
+    // already been captured using the client's number (see utils/pricing.js
+    // and the PR notes for why the actual charge amount isn't touched here).
+    const resolvedPrice = await resolveVariantPrice(variant, element.quantity, foundUser);
+    if (resolvedPrice != null && Number(resolvedPrice).toFixed(2) !== Number(element.price).toFixed(2)) {
+      console.warn(
+        `Order price mismatch: variant ${variant.id}, user ${foundUser?.id ?? 'guest'} - client sent ${element.price}, server resolved ${resolvedPrice}`
+      );
+    }
+    const finalPrice = resolvedPrice != null ? resolvedPrice : element.price;
+
   const createdItem = await OrderItem.create({
       title: variant.title,
       code: variant.stock,
-      price: element.price,
+      price: finalPrice,
       quantity: element.quantity,
       orderId: newOrder.id,
       imgurl: imageUrl,

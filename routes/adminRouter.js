@@ -1,6 +1,9 @@
 const router = (module.exports = require('express').Router())
 const { getCategoriesforAdmin, getVariantsForAdmin, updateCategoryAdmin, addCategoryAdmin, deleteCategoryAdmin, getSubCategoriesforAdmin, addSubCategoryAdmin, updateSubCategoryAdmin, deleteSubCategoryAdmin, getProductsforAdmin, addProductAdmin, updateProductAdmin, deleteProductAdmin, updateVariantForAdmin, deleteVariantForAdmin, getFeaturedVariantsForAdmin } = require('../controller/adminController')
-const { getCustomers } = require('../controller/customerController')
+const { getCustomers, getCustomerDetailForAdmin } = require('../controller/customerController')
+const { updateUserAdmin, sendPasswordResetEmail, getUserById } = require('../controller/userController')
+const { saveShippingprofiles } = require('../controller/shippingProfile')
+const { getSpecialPricesForUser, upsertSpecialPrice, deleteSpecialPrice } = require('../controller/specialPriceController')
 const { deleteImageConnections } = require('../controller/imageController')
 const { getOrders, getSingleOrder, updateOrder, updateOrderStatus, completeOrder } = require('../controller/orderController')
 const { getShipments, getSingleShipment, updateShipment } = require('../controller/shipmentController')
@@ -322,6 +325,102 @@ router.get('/customers/:userId/shipping-profiles', async (req, res, next) => {
 		const { userId } = req.params
 		const data = await getShippingprofiles(userId)
 		res.status(200).send(data)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// Create a new address for a customer - admin-initiated version of the
+// self-service POST /api/shippingprofiles/, which only accepts req.user's
+// own id. Here the admin names the target userId explicitly.
+// POST /api/admin/customers/:userId/shipping-profiles
+router.post('/customers/:userId/shipping-profiles', async (req, res, next) => {
+	try {
+		const { userId } = req.params
+		const data = await saveShippingprofiles({ user: { id: userId }, body: req.body })
+		res.status(201).send(data)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// GET /api/admin/customers/:userId/special-prices
+router.get('/customers/:userId/special-prices', async (req, res, next) => {
+	try {
+		const { userId } = req.params
+		const data = await getSpecialPricesForUser(userId)
+		res.status(200).send(data)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// Create/update a per-variant price override for a customer.
+// POST /api/admin/customers/:userId/special-prices
+router.post('/customers/:userId/special-prices', async (req, res, next) => {
+	try {
+		const { userId } = req.params
+		const { variantId, price } = req.body
+		const data = await upsertSpecialPrice({ userId, variantId, price })
+		res.status(200).send(data)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// DELETE /api/admin/special-prices/:id
+router.delete('/special-prices/:id', async (req, res, next) => {
+	try {
+		const { id } = req.params
+		await deleteSpecialPrice(id)
+		res.sendStatus(200)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// Full customer detail - Customer row + linked User + address book + order
+// history + special prices, for the admin Customer detail page. Registered
+// after the more-specific /customers/:userId/... routes above so ":id" here
+// (a different path depth) can't shadow them either way, but keeping this
+// ordering for readability.
+// GET /api/admin/customers/:id
+router.get('/customers/:id', async (req, res, next) => {
+	try {
+		const { id } = req.params
+		const data = await getCustomerDetailForAdmin(id)
+		if (!data) return res.status(404).json({ message: 'Customer not found.' })
+		res.status(200).send(data)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// Update a User's account-identity fields (name/surname/email/phone/isActive/
+// discountPercent). Whitelisted server-side in updateUserAdmin - isAdmin and
+// password can never be set through this endpoint.
+// PUT /api/admin/users/:id
+router.put('/users/:id', async (req, res, next) => {
+	try {
+		const { id } = req.params
+		const data = await updateUserAdmin(id, req.body)
+		res.status(200).send(data)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// Admin-triggered password reset - reuses the exact same token/email flow as
+// the public "forgot password" (routes/authRouter.js), just skipping the
+// email-ownership step since the admin already knows which user.
+// POST /api/admin/users/:id/send-reset
+router.post('/users/:id/send-reset', async (req, res, next) => {
+	try {
+		const { id } = req.params
+		const user = await getUserById(id)
+		if (!user) return res.status(404).json({ message: 'User not found.' })
+		await sendPasswordResetEmail(user)
+		res.status(200).json({ message: 'Reset email sent.' })
 	} catch (error) {
 		next(error)
 	}
