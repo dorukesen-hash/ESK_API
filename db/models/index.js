@@ -87,8 +87,8 @@ Shipment.belongsTo(Carrier);
 Order.hasMany(OrderItem);
 OrderItem.belongsTo(Order);
 
-// Variant.hasMany(OrderItem,{foreignKey: 'variant_id'});
-// OrderItem.belongsTo(Variant,{as:"var1", foreignKey: 'variant_id'});
+Variant.hasMany(OrderItem, { foreignKey: 'variant_id' });
+OrderItem.belongsTo(Variant, { as: 'variantRef', foreignKey: 'variant_id' });
 
 Shipment.hasMany(Order);
 Order.belongsTo(Shipment);

@@ -6,12 +6,20 @@ const errorMiddleware = require('./middleware/error')
 const passport = require('./middleware/passport');
 const authMiddleware = require('./middleware/auth')
 const cookieParser = require("cookie-parser");
+const { handleStripeWebhook } = require('./controller/stripeController');
 
 require('./db')
 const app = express()
 
 // Middleware Order: First Logging, Then Parsers, Then Authentication
 app.use(morgan(':remote-addr - :remote-user [:date[clf]] ":method :url HTTP/:http-version" :status :res[content-length] :response-time ms'))
+
+// Stripe webhook needs the RAW request body for signature verification, so
+// it's registered before express.json() would otherwise parse/consume it -
+// and outside apiRouter/authMiddleware, since Stripe authenticates via the
+// Stripe-Signature header, not cookies.
+app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), handleStripeWebhook)
+
 app.use(express.urlencoded({ extended: true, limit: '50mb' }))
 app.use(express.json({ limit: '50mb' }))
 

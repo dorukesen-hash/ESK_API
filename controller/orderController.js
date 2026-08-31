@@ -3,6 +3,7 @@ const { Op } = require('sequelize')
 const { createAndWhere } = require('./scopes');
 const Billing = require('../db/models/billing');
 const sendEmail = require('../utils/sendEmail');
+const AppError = require('../utils/appError');
 const { resolveVariantPrice } = require('../utils/pricing');
 
 function generateCustomUniqueId() {
@@ -47,7 +48,7 @@ const getOrders = async (data) => {
   const whereConditions = [];
 
   if(status) {
-    if ( status === "New") {
+    if ( status === "Pending") {
       whereConditions.push({ orderstatusId : 1 });
     } else if (status === "In Progress") {
       whereConditions.push({ orderstatusId : 2 });
@@ -217,9 +218,13 @@ const updateOrderStatus = async ( data) => {
 
 const completeOrder = async (data) => {
 
-  const order = await Order.findOne({where: { id: data.orderId}}) 
+  const order = await Order.findOne({where: { id: data.orderId}})
 
-  if ( order.orderstatusId === 3  || order.shipmentId) {
+  // createOrder() always sets shipmentId at checkout time (a shipping-quote
+  // Shipment, not a fulfillment one), so checking shipmentId here made this
+  // a no-op for essentially every real order - only the status matters for
+  // "has this order already been marked complete."
+  if (order.orderstatusId === 3) {
       return;
   }
 
@@ -249,8 +254,15 @@ const createOrder = async (data) => {
 
   const{ billing, items, recipient, shipping, paymentIntent}= order;
 
+  // Without a real PaymentIntent id there is no way for the webhook to ever
+  // reconcile/confirm this order later - refuse rather than create an order
+  // that can never be marked paid.
+  if (!paymentIntent?.id) {
+    throw new AppError('Missing payment confirmation.', 400);
+  }
+
   // Normalize payment amount from Stripe (amount in cents) to dollars
-  const amountCents = Number(paymentIntent?.amount) || 0;
+  const amountCents = Number(paymentIntent.amount) || 0;
   const amount = amountCents / 100;
 
   let foundUser;
@@ -297,16 +309,9 @@ const createOrder = async (data) => {
     });
   }
 
-  //CREATE TRANSACTION
-   await Transaction.create({
-    paymentId : paymentIntent.paymentIntentId || "",
-    amount: amount,
-    currency: paymentIntent.currency || "",
-    customerId: myCustomer.id,
-    status: paymentIntent.status || "",
-    description: paymentIntent.description || "",
-    paymentMethod: paymentIntent.paymentMethod || ""
-  })
+  // Transaction creation moved to confirmOrderPayment() (called from the
+  // Stripe webhook) - it's the only place we know for certain a payment was
+  // actually confirmed by Stripe, not just claimed by the client.
 
   //CREATE BILLING
 
@@ -322,8 +327,7 @@ const createOrder = async (data) => {
       })
 
   
- const carr = await Carrier.create({
-    name: shipping.carrier || ""})
+ const [carr] = await Carrier.findOrCreate({ where: { name: shipping.carrier || "" } });
 
   //CREATE SHIPPING
   const newShipping = await Shipment.create({
@@ -375,7 +379,10 @@ const createOrder = async (data) => {
     billingId:  newBilling.id,
   // store price in dollars
   price: amount,
-    isPaid: true,
+    // Only the Stripe webhook (confirmOrderPayment, once it verifies the
+    // charge actually succeeded) is allowed to flip this to true.
+    isPaid: false,
+    stripePaymentIntentId: paymentIntent.id,
     closure: "open",
     userId: foundUser.id,
     orderstatusId: 1,
@@ -419,7 +426,10 @@ const createOrder = async (data) => {
       quantity: element.quantity,
       orderId: newOrder.id,
       imgurl: imageUrl,
-      variantId: element.id
+      // The Sequelize association uses this exact string as the JS
+      // attribute name (Variant.hasMany(OrderItem, {foreignKey:
+      // 'variant_id'})) - "variantId" would silently be dropped.
+      variant_id: element.id
     });
   orderItems.push(createdItem);
   }
@@ -460,12 +470,41 @@ const createOrder = async (data) => {
   }
 
   return "Order created successfully!"
-  
+
+};
+
+// Called only from the Stripe webhook handler once Stripe itself confirms a
+// payment_intent.succeeded event - this is the one place an Order actually
+// gets marked paid, and the one place a real Transaction row gets created.
+// Idempotent: webhooks can and do redeliver the same event.
+const confirmOrderPayment = async (stripePaymentIntent) => {
+  const order = await Order.findOne({ where: { stripePaymentIntentId: stripePaymentIntent.id } });
+  if (!order) {
+    console.warn(`Webhook: no order found for PaymentIntent ${stripePaymentIntent.id}`);
+    return;
+  }
+  if (order.isPaid) {
+    return; // already confirmed - duplicate webhook delivery
+  }
+
+  order.isPaid = true;
+  await order.save();
+
+  await Transaction.create({
+    payment_id: stripePaymentIntent.id,
+    customer_id: order.customerId != null ? String(order.customerId) : null,
+    amount: (Number(stripePaymentIntent.amount) || 0) / 100,
+    currency: stripePaymentIntent.currency || '',
+    status: stripePaymentIntent.status || '',
+    payment_method: stripePaymentIntent.payment_method || '',
+    orderId: order.id,
+  });
 };
 
 module.exports = {
     getOrders,
     createOrder,
+    confirmOrderPayment,
     getSingleOrder,
     updateOrder,
     updateOrderStatus,
