@@ -397,13 +397,13 @@ router.get('/customers/:id', async (req, res, next) => {
 })
 
 // Update a User's account-identity fields (name/surname/email/phone/isActive/
-// discountPercent). Whitelisted server-side in updateUserAdmin - isAdmin and
-// password can never be set through this endpoint.
+// discountPercent/isAdmin). Password can never be set through this endpoint;
+// isAdmin is normalized+guarded in updateUserAdmin (can't unset your own).
 // PUT /api/admin/users/:id
 router.put('/users/:id', async (req, res, next) => {
 	try {
 		const { id } = req.params
-		const data = await updateUserAdmin(id, req.body)
+		const data = await updateUserAdmin(id, req.body, req.user?.id)
 		res.status(200).send(data)
 	} catch (error) {
 		next(error)

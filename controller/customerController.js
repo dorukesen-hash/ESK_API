@@ -52,7 +52,7 @@ const getCustomerDetailForAdmin = async (id) => {
         include: [
             {
                 model: User,
-                attributes: ['id', 'name', 'surname', 'email', 'phone', 'isActive', 'discountPercent', 'createdAt'],
+                attributes: ['id', 'name', 'surname', 'email', 'phone', 'isActive', 'isAdmin', 'discountPercent', 'createdAt'],
             },
         ],
     });

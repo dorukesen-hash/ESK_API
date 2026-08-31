@@ -28,13 +28,25 @@ const updateUser = async (id, params) => {
 }
 
 // Admin-facing update - whitelisted fields only, so a request body can never
-// smuggle in isAdmin/password/token/etc. through this endpoint.
+// smuggle in password/token/etc. through this endpoint. isAdmin is handled
+// separately below (normalized + guarded), not through this plain whitelist.
 const ADMIN_EDITABLE_USER_FIELDS = ['name', 'surname', 'email', 'phone', 'isActive', 'discountPercent'];
-const updateUserAdmin = async (id, params) => {
+const updateUserAdmin = async (id, params, actingAdminId) => {
     const fields = {};
     for (const key of ADMIN_EDITABLE_USER_FIELDS) {
         if (params[key] !== undefined) fields[key] = params[key];
     }
+
+    if (params.isAdmin !== undefined) {
+        // Legacy STRING column - only the exact value "admin" is treated as
+        // privileged elsewhere (requireAdmin, login), so a boolean from the
+        // admin UI is normalized to that exact string or null.
+        if (!params.isAdmin && String(id) === String(actingAdminId)) {
+            throw new AppError('Kendi yönetici yetkinizi kaldıramazsınız.', 400);
+        }
+        fields.isAdmin = params.isAdmin ? 'admin' : null;
+    }
+
     await User.update(fields, { where: { id } });
     return getUserById(id);
 }
