@@ -36,6 +36,7 @@ const Claim = require('./claim')
 const VariantAuditLog = require('./variantAuditLog')
 const DiscountCode = require('./discountCode')
 const DiscountCodeRedemption = require('./discountCodeRedemption')
+const PricingAuditLog = require('./pricingAuditLog')
 
 
 User.hasMany(Category);
@@ -214,6 +215,14 @@ DiscountCodeRedemption.belongsTo(Order, { constraints: false })
 DiscountCode.hasMany(Order)
 Order.belongsTo(DiscountCode)
 
+// Pricing audit log (SpecialPrices + discountPercent changes)
+User.hasMany(PricingAuditLog, { as: 'pricingAuditLog', foreignKey: 'targetUserId' })
+PricingAuditLog.belongsTo(User, { as: 'targetUser', foreignKey: 'targetUserId' })
+User.hasMany(PricingAuditLog, { as: 'pricingAuditActions', foreignKey: 'actorUserId' })
+PricingAuditLog.belongsTo(User, { as: 'actor', foreignKey: 'actorUserId' })
+Variant.hasMany(PricingAuditLog, { foreignKey: 'variantId' })
+PricingAuditLog.belongsTo(Variant, { foreignKey: 'variantId' })
+
 
 module.exports = {
 		User,
@@ -253,5 +262,6 @@ module.exports = {
 		Billing,
 		VariantAuditLog,
 		DiscountCode,
-		DiscountCodeRedemption
+		DiscountCodeRedemption,
+		PricingAuditLog
 	};

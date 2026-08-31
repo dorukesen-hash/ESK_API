@@ -87,11 +87,21 @@ const getVariantAuditLog = async (variantId) => {
 // variant's rows survive (the FK is ON DELETE SET NULL, not CASCADE) but
 // variantId becomes null, so `variant` comes back null for those - the
 // frontend falls back to a plain "(deleted variant)" label in that case.
-const getAllVariantAuditLog = async ({ page = 0, limit = 50 } = {}) => {
+// `fields` (optional, comma-separated) filters to only the given Variant
+// field names - used by the admin Activity Log page's "Price History" view
+// to narrow the same feed down to pricing fields server-side, so pagination
+// stays correct instead of filtering a page's worth of rows client-side.
+const getAllVariantAuditLog = async ({ page = 0, limit = 50, fields } = {}) => {
   const limitNum = parseInt(limit) || 50;
   const offsetNum = (parseInt(page) || 0) * limitNum;
+  const where = {};
+  if (fields) {
+    const fieldList = String(fields).split(",").map((f) => f.trim()).filter(Boolean);
+    if (fieldList.length > 0) where.field = fieldList;
+  }
 
   return await VariantAuditLog.findAndCountAll({
+    where,
     include: [
       { model: User, attributes: ["id", "name", "surname", "email"] },
       { model: Variant, attributes: ["id", "title", "stock"] },

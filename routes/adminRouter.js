@@ -4,6 +4,7 @@ const { getCustomers, getCustomerDetailForAdmin } = require('../controller/custo
 const { updateUserAdmin, sendPasswordResetEmail, getUserById } = require('../controller/userController')
 const { saveShippingprofiles } = require('../controller/shippingProfile')
 const { getSpecialPricesForUser, upsertSpecialPrice, deleteSpecialPrice } = require('../controller/specialPriceController')
+const { getPricingAuditLogForUser } = require('../controller/pricingAuditController')
 const { deleteImageConnections } = require('../controller/imageController')
 const { getOrders, getSingleOrder, updateOrder, updateOrderStatus, completeOrder } = require('../controller/orderController')
 const { getShipments, getSingleShipment, updateShipment } = require('../controller/shipmentController')
@@ -362,7 +363,7 @@ router.post('/customers/:userId/special-prices', async (req, res, next) => {
 	try {
 		const { userId } = req.params
 		const { variantId, price } = req.body
-		const data = await upsertSpecialPrice({ userId, variantId, price })
+		const data = await upsertSpecialPrice({ userId, variantId, price, actorUserId: req.user?.id })
 		res.status(200).send(data)
 	} catch (error) {
 		next(error)
@@ -373,8 +374,19 @@ router.post('/customers/:userId/special-prices', async (req, res, next) => {
 router.delete('/special-prices/:id', async (req, res, next) => {
 	try {
 		const { id } = req.params
-		await deleteSpecialPrice(id)
+		await deleteSpecialPrice(id, req.user?.id)
 		res.sendStatus(200)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// GET /api/admin/customers/:userId/pricing-audit-log
+router.get('/customers/:userId/pricing-audit-log', async (req, res, next) => {
+	try {
+		const { userId } = req.params
+		const data = await getPricingAuditLogForUser(userId)
+		res.status(200).send(data)
 	} catch (error) {
 		next(error)
 	}
