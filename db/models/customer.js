@@ -36,6 +36,11 @@ const Customer = db.define('customer', {
     phone: {
         type: Sequelize.STRING,
         allowNull: true,
+    },
+    isActive: {
+        type: Sequelize.BOOLEAN,
+        allowNull: false,
+        defaultValue: true,
     }
 })
 

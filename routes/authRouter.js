@@ -13,6 +13,7 @@ const {
   getUserBy,
   sendPasswordResetEmail,
 } = require("../controller/userController");
+const { ensureCustomerForUser } = require("../controller/customerController");
 const {
   generateTokens,
   verifyToken,
@@ -38,6 +39,7 @@ router.post("/register", async (req, res) => {
       name,
       surname,
     });
+    await ensureCustomerForUser(newUser);
 
     //generate tokens for new user and save them to DB
     const { accessToken: token, refreshToken: reftoken } =
