@@ -10,6 +10,7 @@ const { getOrders, getSingleOrder, updateOrder, updateOrderItems, updateOrderSta
 const { getOrderAuditLog } = require('../controller/orderAuditController')
 const { getInvoicesForAdmin } = require('../controller/invoiceController')
 const { getShipments, getSingleShipment, updateShipment } = require('../controller/shipmentController')
+const { getCarrierStats } = require('../controller/carrierController')
 const { getShipmentStatus } = require('../controller/shipmentStatusController')
 const { uploadVariantExcel } = require('../controller/variantController')
 const { exportVariantsExcel, bulkImportVariantsExcel } = require('../controller/variantBulkController')
@@ -201,6 +202,16 @@ router.get('/shipment/:id', async (req, res, next) => {
 router.get('/shipment-statuses', async (req, res, next) => {
 	try {
 		const data = await getShipmentStatus()
+		res.status(200).send(data)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// GET /api/admin/carrier-stats
+router.get('/carrier-stats', async (req, res, next) => {
+	try {
+		const data = await getCarrierStats()
 		res.status(200).send(data)
 	} catch (error) {
 		next(error)
