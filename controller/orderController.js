@@ -362,10 +362,13 @@ const createOrder = async (data) => {
     }
   }
 
-  //find or create the customer
-  let checkCustomer = await Customer.findOne({
-    where: { email: billing.email },
-  });
+  //find or create the customer - prefer the userId match (every account
+  // gets a Customer row at registration now, see ensureCustomerForUser),
+  // falling back to email for rows created before that existed.
+  let checkCustomer = await Customer.findOne({ where: { userId: foundUser.id } });
+  if (!checkCustomer) {
+    checkCustomer = await Customer.findOne({ where: { email: billing.email } });
+  }
 
   if (checkCustomer) {
     myCustomer = checkCustomer;
