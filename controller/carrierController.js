@@ -7,11 +7,15 @@ const getCarriers = async () => {
 }
 
 // Admin "Carriers" tab - real usage stats per provider (label/shipment
-// count, total shipping cost paid) instead of a bare name list.
+// count, total shipping cost paid) instead of a bare name list. Sorted by
+// shipment count (most-used first) rather than alphabetically, so whichever
+// provider the business actually relies on most - e.g. an external freight
+// partner used for the bulk of fulfillment - surfaces at the top on its
+// own, without hardcoding any one provider as "primary".
 const getCarrierStats = async () => {
-	const carriers = await Carrier.findAll({ order: [['name', 'ASC']] });
+	const carriers = await Carrier.findAll();
 
-	return Promise.all(
+	const stats = await Promise.all(
 		carriers.map(async (carrier) => {
 			const shipmentCount = await Shipment.count({ where: { carrierId: carrier.id } });
 			const totalPaid = await Shipment.sum('totalPrice', { where: { carrierId: carrier.id } });
@@ -23,6 +27,8 @@ const getCarrierStats = async () => {
 			};
 		})
 	);
+
+	return stats.sort((a, b) => b.shipmentCount - a.shipmentCount || a.name.localeCompare(b.name));
 };
 
 
