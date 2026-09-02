@@ -35,11 +35,11 @@ const Shipment = db.define('shipment', {
         allowNull: true,
     },
     totalDeci: {
-        type: Sequelize.DECIMAL(5, 2),
+        type: Sequelize.DECIMAL(10, 2),
         allowNull: true,
     },
     totalWeight: {
-        type: Sequelize.DECIMAL(5, 2),
+        type: Sequelize.DECIMAL(10, 2),
         allowNull: true,
     },
     totalPrice: {
