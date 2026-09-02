@@ -247,8 +247,27 @@ const exportOrdersExcel = async (filters) => {
   return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
 };
 
+// Refunded/remaining amounts are never stored - always asked of Stripe
+// fresh, same as refundOrder itself does, to avoid the amount_refunded-
+// lives-on-the-Charge-not-the-PaymentIntent trap. Only meaningful for a
+// real Stripe-paid order; manual orders (no stripePaymentIntentId) have no
+// refund mechanism here, so they're left alone.
+const attachRefundTotals = async (order) => {
+  if (!order || !order.stripePaymentIntentId) return order;
+  try {
+    const paymentIntent = await stripe.paymentIntents.retrieve(order.stripePaymentIntentId);
+    const refunds = await stripe.refunds.list({ payment_intent: order.stripePaymentIntentId, limit: 100 });
+    const refundedCents = refunds.data.reduce((sum, r) => sum + r.amount, 0);
+    order.dataValues.amountRefunded = refundedCents / 100;
+    order.dataValues.amountRemaining = (paymentIntent.amount - refundedCents) / 100;
+  } catch (err) {
+    console.error(`Failed to fetch refund totals for order ${order.id}:`, err.message);
+  }
+  return order;
+};
+
 const getSingleOrder = async (id) => {
-   return await Order.findOne({
+   const order = await Order.findOne({
     where: { id: id},
     include: [
       {
@@ -277,17 +296,26 @@ const getSingleOrder = async (id) => {
       {
         model: Shipment,
         attributes: [
-          "extra_informations"
-          ],
+          "extra_informations",
+          "totalPrice",
+          "totalWeight",
+          "totalDeci",
+          "tracking",
+        ],
+        include: [{ model: Carrier, attributes: ["id", "name"] }],
       },
       {
         model: Billing,
       },
       {
         model: Transaction,
+      },
+      {
+        model: OrderStatus,
       }
     ]
    })
+   return attachRefundTotals(order)
 }
 
 const updateOrder = async (id, data) => {
@@ -923,6 +951,28 @@ const createManualOrder = async (data, actorUserId) => {
   const orderItems = [];
   for (const row of itemRows) {
     orderItems.push(await OrderItem.create({ ...row, orderId: newOrder.id }));
+  }
+
+  // confirmOrderPayment (the Stripe webhook) is the only other place an
+  // Invoice gets created - manual orders never go through it, so a paid
+  // manual order used to get no Invoice at all even though it's a real,
+  // completed sale just as much as a card order.
+  if (isPaid) {
+    const now = new Date().toISOString();
+    const invoice = await Invoice.create({
+      userId: newOrder.userId,
+      documentNumber: `INV-${newOrder.orderNumber}`,
+      issueDate: now,
+      paymentDate: now,
+      grandTotal: newOrder.price,
+      grandTotalInclVat: newOrder.price,
+      paymentTotal: newOrder.price,
+      paymentType: 'manual',
+      paymentPlatform: 'manual',
+      description: `Invoice for Order #${newOrder.orderNumber}`,
+    });
+    newOrder.invoiceId = invoice.id;
+    await newOrder.save();
   }
 
   await logOrderChange({
