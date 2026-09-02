@@ -1,7 +1,7 @@
-// UPS_BASE_URL lets a deploy pin to UPS's CIE/test host for local dev
-// (https://wwwcie.ups.com); production is the default now that real UPS
-// production credentials are in use - see UPS_CLIENT_ID/UPS_CLIENT_SECRET/
-// UPS_ACCOUNT_NUMBER in .env.
-const getUpsBaseUrl = () => process.env.UPS_BASE_URL || 'https://onlinetools.ups.com';
+// UPS is rate-quote-only here (Taibeta is the actual primary shipping
+// provider) - CIE/test host is the deliberate default for that. Set
+// UPS_BASE_URL to https://onlinetools.ups.com only if UPS itself is ever
+// used to actually ship (real labels), not just to price-compare.
+const getUpsBaseUrl = () => process.env.UPS_BASE_URL || 'https://wwwcie.ups.com';
 
 module.exports = { getUpsBaseUrl };
