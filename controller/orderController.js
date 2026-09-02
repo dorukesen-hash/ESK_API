@@ -953,6 +953,28 @@ const createManualOrder = async (data, actorUserId) => {
     orderItems.push(await OrderItem.create({ ...row, orderId: newOrder.id }));
   }
 
+  // confirmOrderPayment (the Stripe webhook) is the only other place an
+  // Invoice gets created - manual orders never go through it, so a paid
+  // manual order used to get no Invoice at all even though it's a real,
+  // completed sale just as much as a card order.
+  if (isPaid) {
+    const now = new Date().toISOString();
+    const invoice = await Invoice.create({
+      userId: newOrder.userId,
+      documentNumber: `INV-${newOrder.orderNumber}`,
+      issueDate: now,
+      paymentDate: now,
+      grandTotal: newOrder.price,
+      grandTotalInclVat: newOrder.price,
+      paymentTotal: newOrder.price,
+      paymentType: 'manual',
+      paymentPlatform: 'manual',
+      description: `Invoice for Order #${newOrder.orderNumber}`,
+    });
+    newOrder.invoiceId = invoice.id;
+    await newOrder.save();
+  }
+
   await logOrderChange({
     orderId: newOrder.id, actorUserId, action: 'manual_create', field: null, oldValue: null,
     newValue: `Manual order, isPaid=${Boolean(isPaid)}${paymentNote ? `, note: ${paymentNote}` : ''}`,
