@@ -8,6 +8,7 @@ const AppError = require('../utils/appError');
 const { resolveVariantPrice, resolveOrderPricing } = require('../utils/pricing');
 const { logOrderChange } = require('./orderAuditController');
 const { ensureCustomerForUser } = require('./customerController');
+const { calculatePalletPacking } = require('../utils/palletPacking');
 const Stripe = require('stripe');
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 const XLSX = require('xlsx');
@@ -38,6 +39,40 @@ function generateCustomUniqueId() {
   return uniqueId; // Örnek çıktı: "250710144155"
 }
 
+// Server-side pallet packing for the Shipment row, using real pack_*
+// dimensions/weight from the DB (never client-sent shipping.totalDeci/
+// totalWeight, which nothing has ever actually computed correctly). Items
+// with missing/invalid package dimensions don't block order creation -
+// this is a record-keeping figure, not something checkout should ever
+// fail on - they're just excluded and logged.
+async function resolvePalletTotalsFromOrderItems(items) {
+  const variantIds = [...new Set((items || []).map((i) => i.id))];
+  const variants = await Variant.findAll({ where: { id: variantIds } });
+  const variantById = new Map(variants.map((v) => [v.id, v]));
+
+  const packItems = (items || [])
+    .map((i) => {
+      const variant = variantById.get(i.id);
+      if (!variant) return null;
+      return {
+        sku: variant.title || String(variant.id),
+        length: variant.pack_length,
+        width: variant.pack_width,
+        height: variant.pack_height,
+        weight: variant.pack_weight,
+        quantity: i.quantity,
+      };
+    })
+    .filter(Boolean);
+
+  try {
+    const { totalWeight, totalDeci } = calculatePalletPacking(packItems);
+    return { totalWeight, totalDeci };
+  } catch (err) {
+    console.error('Pallet packing calculation failed for order items:', err.message);
+    return { totalWeight: 0, totalDeci: 0 };
+  }
+}
 
 // Shared by getOrders (paginated) and exportOrdersExcel (unpaginated) so the
 // two can never drift apart on what a given filter set actually matches.
@@ -623,6 +658,8 @@ const createOrder = async (data) => {
   
  const [carr] = await Carrier.findOrCreate({ where: { name: shipping.carrier || "" } });
 
+  const { totalWeight, totalDeci } = await resolvePalletTotalsFromOrderItems(items);
+
   //CREATE SHIPPING
   const newShipping = await Shipment.create({
     name: recipient.name || "",
@@ -634,8 +671,8 @@ const createOrder = async (data) => {
     city: recipient.city || "",
     state: recipient.state || "",
     zip: recipient.zip || "",
-    totalDeci : shipping.totalDeci || 0,
-    totalWeight: shipping.totalWeight || 0,
+    totalDeci,
+    totalWeight,
     totalPrice: shipping.price || 0,
     carrierId: carr.id,
     userId: foundUser.id
@@ -809,6 +846,10 @@ const createManualOrder = async (data, actorUserId) => {
 
   const [carr] = await Carrier.findOrCreate({ where: { name: shipping?.carrier || '' } });
 
+  const { totalWeight, totalDeci } = await resolvePalletTotalsFromOrderItems(
+    items.map((it) => ({ id: it.variantId, quantity: it.quantity }))
+  );
+
   const newShipping = await Shipment.create({
     name: recipient?.name || myCustomer.name || '',
     firstline: recipient?.firstline || '',
@@ -818,8 +859,8 @@ const createManualOrder = async (data, actorUserId) => {
     city: recipient?.city || '',
     state: recipient?.state || '',
     zip: recipient?.zip || '',
-    totalDeci: shipping?.totalDeci || 0,
-    totalWeight: shipping?.totalWeight || 0,
+    totalDeci,
+    totalWeight,
     totalPrice: shipping?.price || 0,
     carrierId: carr.id,
     userId: foundUser?.id || null,
