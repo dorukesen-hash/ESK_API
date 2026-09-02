@@ -42,6 +42,26 @@ const addCustomer = async (param) => {
     return await Customer.create({ ...param })
 }
 
+// Every registered User should have a Customer row from the moment they
+// register, not just once they place their first order - otherwise the
+// admin "Customers" list (and a user's own account pages, which look up by
+// Customer) silently miss anyone who hasn't ordered yet. Called from every
+// User-creation path (register, Google OAuth) and from the one-off backfill
+// for accounts that predate this.
+const ensureCustomerForUser = async (user) => {
+    if (!user) return null;
+    const existing = await Customer.findOne({ where: { userId: user.id } });
+    if (existing) return existing;
+    return await Customer.create({
+        name: user.name || '',
+        surname: user.surname || '',
+        email: user.email || '',
+        phone: user.phone || '',
+        userId: user.id,
+        isActive: user.isActive !== false,
+    });
+};
+
 // Full detail view for the admin "Customer accounts" tab - the Customer row
 // (order-linked contact snapshot) plus its login User row, address book, order
 // history, and any per-variant price overrides. Kept as one query group here
@@ -84,4 +104,5 @@ module.exports = {
     getCustomerByName,
     addCustomer,
     getCustomerDetailForAdmin,
+    ensureCustomerForUser,
 }

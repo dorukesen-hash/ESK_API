@@ -50,6 +50,10 @@ const getAccountOrders = async (userId) => {
                         "tracking",
                         "extra_informations"
                     ],
+                    include: [
+                        { model: Carrier, attributes: ["id", "name"] },
+                        { model: ShipmentStatus, attributes: ["id", "name"] },
+                    ],
                 },
                 {
                     model: OrderStatus,

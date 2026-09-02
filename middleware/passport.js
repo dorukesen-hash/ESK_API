@@ -2,6 +2,7 @@ const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const { User } = require('../db/models')
 const { generateTokens } = require('../controller/tokenController');
+const { ensureCustomerForUser } = require('../controller/customerController');
 
 passport.use(
     new GoogleStrategy(
@@ -29,6 +30,7 @@ passport.use(
                         password: "",
                         surname: ''
                     });
+                    await ensureCustomerForUser(user);
                 }
 
                 // Create token

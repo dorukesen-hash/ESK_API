@@ -66,24 +66,24 @@ const Variant = db.define("variant", {
     type: Sequelize.TEXT,
     allowNull: true,
   },
+// Real per-package weight/dimensions - the pallet-shipping calculation
+// (utils/palletPacking.js) is built entirely on these, never on the
+// pallet_* fields below (those are wholesale-pricing reference data only).
+// DECIMAL, not INTEGER - fractional inches/lbs were being truncated.
 pack_weight: {
-    type: Sequelize.INTEGER,
+    type: Sequelize.DECIMAL(10, 2),
     allowNull: true,
   },
 pack_width: {
-    type: Sequelize.INTEGER,
+    type: Sequelize.DECIMAL(10, 2),
     allowNull: true,
   },
 pack_length: {
-    type: Sequelize.INTEGER,
+    type: Sequelize.DECIMAL(10, 2),
     allowNull: true,
   },
 pack_height: {
-    type: Sequelize.INTEGER,
-    allowNull: true,
-  },
-pack_height: {
-    type: Sequelize.INTEGER,
+    type: Sequelize.DECIMAL(10, 2),
     allowNull: true,
   },
 quantity_case: {

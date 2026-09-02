@@ -1,5 +1,5 @@
 const crypto = require('crypto')
-const { User, Cart, ShippingProfiles, Order} = require('../db/models')
+const { User, Cart, ShippingProfiles, Order, Customer} = require('../db/models')
 const AppError = require('../utils/appError')
 const sendEmail = require('../utils/sendEmail')
 const { logDiscountPercentChange } = require('./pricingAuditController')
@@ -58,6 +58,13 @@ const updateUserAdmin = async (id, params, actingAdminId) => {
     }
 
     await User.update(fields, { where: { id } });
+
+    // Keep the linked Customer row's active state in sync - a deactivated
+    // User shouldn't still look active in the admin Customers list.
+    if (fields.isActive !== undefined) {
+        await Customer.update({ isActive: fields.isActive }, { where: { userId: id } });
+    }
+
     return getUserById(id);
 }
 
@@ -203,6 +210,10 @@ const passChange = async (data /*userData*/) => {
 const deleteUser = async (id) => {
     let user = await User.findByPk(id)
     if (!user) throw new AppError('User not found.', 500)
+    // Deactivate rather than delete the linked Customer - it may be
+    // referenced by historical Order rows (Order.customerId), so it must
+    // survive the User being removed.
+    await Customer.update({ isActive: false }, { where: { userId: id } });
     return await User.destroy({ where: { id: id }})
 }
 
