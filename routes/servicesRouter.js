@@ -203,13 +203,28 @@ router.post("/sending-options", async (req, res) => {
     return res.status(err.status || 500).json({ error: err.message });
   }
 
+  // The caller (CalculateShippingModal.js) only collects a zip code, no
+  // state - Taibeta rejects a quote request without one.
+  let destinationState = recipient?.StateProvinceCode;
+  if (!destinationState) {
+    try {
+      destinationState = await findState(recipient?.PostalCode);
+    } catch (err) {
+      return res.status(400).json({ error: "Invalid or unsupported ZIP code" });
+    }
+  }
+
   try {
     const response = await axios.put(
       "https://www.taibeta.net/PublicAPI/Shipping/getRateQuote",
       {
         authenticationKey: process.env.TAIBETA_API_KEY,
-        originZipCode: "11501",
+        originZipCode: "75082",
+        originState: "TX",
+        originCountry: 1,
         destinationZipCode: recipient?.PostalCode,
+        destinationState,
+        destinationCountry: 1,
         Commodities: palletsToTaibetaCommodities(pallets),
         WeightUnits: 1,
         DimensionUnits: 1,
