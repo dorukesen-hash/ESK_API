@@ -247,8 +247,27 @@ const exportOrdersExcel = async (filters) => {
   return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
 };
 
+// Refunded/remaining amounts are never stored - always asked of Stripe
+// fresh, same as refundOrder itself does, to avoid the amount_refunded-
+// lives-on-the-Charge-not-the-PaymentIntent trap. Only meaningful for a
+// real Stripe-paid order; manual orders (no stripePaymentIntentId) have no
+// refund mechanism here, so they're left alone.
+const attachRefundTotals = async (order) => {
+  if (!order || !order.stripePaymentIntentId) return order;
+  try {
+    const paymentIntent = await stripe.paymentIntents.retrieve(order.stripePaymentIntentId);
+    const refunds = await stripe.refunds.list({ payment_intent: order.stripePaymentIntentId, limit: 100 });
+    const refundedCents = refunds.data.reduce((sum, r) => sum + r.amount, 0);
+    order.dataValues.amountRefunded = refundedCents / 100;
+    order.dataValues.amountRemaining = (paymentIntent.amount - refundedCents) / 100;
+  } catch (err) {
+    console.error(`Failed to fetch refund totals for order ${order.id}:`, err.message);
+  }
+  return order;
+};
+
 const getSingleOrder = async (id) => {
-   return await Order.findOne({
+   const order = await Order.findOne({
     where: { id: id},
     include: [
       {
@@ -296,6 +315,7 @@ const getSingleOrder = async (id) => {
       }
     ]
    })
+   return attachRefundTotals(order)
 }
 
 const updateOrder = async (id, data) => {
