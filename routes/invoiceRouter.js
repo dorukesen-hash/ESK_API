@@ -1,6 +1,6 @@
 const router = (module.exports = require('express').Router())
 const AppError = require('../utils/appError')
-const { generateInvoicePDF } = require('../controller/invoiceController');
+const { generateInvoicePDF, generatePackingSlipPDF } = require('../controller/invoiceController');
 
 // Generate invoice PDF and send to frontend
 router.get('/pdf/:orderId', async (req, res, next) => {
@@ -15,6 +15,23 @@ router.get('/pdf/:orderId', async (req, res, next) => {
 		return res.status(200).send(pdfBuffer);
 	} catch (err) {
 		console.error('Error in PDF endpoint:', err);
+		next(err);
+	}
+});
+
+// Generate packing slip PDF (no prices - a pick/ship document, not a receipt)
+router.get('/packing-slip/:orderId', async (req, res, next) => {
+	try {
+		const orderId = req.params.orderId;
+		res.contentType('application/pdf')
+		const pdfBuffer = await generatePackingSlipPDF(orderId);
+		if (!pdfBuffer || pdfBuffer.length < 100) {
+			console.error('Packing slip generation failed or buffer too small:', pdfBuffer);
+			return res.status(500).send('Packing slip generation failed');
+		}
+		return res.status(200).send(pdfBuffer);
+	} catch (err) {
+		console.error('Error in packing slip endpoint:', err);
 		next(err);
 	}
 });

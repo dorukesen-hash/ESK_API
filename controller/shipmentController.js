@@ -1,5 +1,5 @@
 const { Op } = require('sequelize');
-const { Shipment, Carrier, ShipmentStatus } = require('../db/models');
+const { Shipment, Carrier, ShipmentStatus, Order } = require('../db/models');
 const { createAndWhere } = require('./scopes');
 
 const getShipments = async (data) => {
@@ -51,6 +51,13 @@ const getShipments = async (data) => {
         },
        {
         model: ShipmentStatus
+        },
+       {
+        // hasMany on this side (an order legally belongs to one shipment,
+        // never the reverse) - one order per shipment in practice since
+        // Phase 6 fixed the lifecycle, so the admin UI just reads orders[0].
+        model: Order,
+        attributes: ["id", "orderNumber", "name"],
         }]
 
    })
@@ -63,7 +70,8 @@ const getSingleShipment = async (id) => {
       where: { id: id},
        include: [
           {model: Carrier},
-          {model: ShipmentStatus}]})
+          {model: ShipmentStatus},
+          {model: Order, attributes: ["id", "orderNumber", "name"]}]})
 }
 
 const updateShipment  = async (id, data) => {

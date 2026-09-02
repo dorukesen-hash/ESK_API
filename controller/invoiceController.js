@@ -257,8 +257,119 @@ const generateInvoicePDF = async (orderId) => {
     return Buffer.from(pdfBuffer);
 };
 
+function renderPackingSlipHTML(slip) {
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Packing Slip ${slip.order_no}</title>
+    <style>
+        body { font-family: Arial, sans-serif; color: #333; margin: 40px; }
+        h1 { text-align: center; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        td, th { border: 1px solid #ccc; padding: 8px; text-align: left; }
+        th { background-color: #f5f5f5; }
+        .header { display: flex; justify-content: space-between; align-items: center; }
+        .logo { width: 280px; height: 140px; object-fit: contain; }
+        .section { margin-bottom: 20px; }
+        .address-col { background: #fafafa; padding: 16px; border-radius: 8px; border: 1px solid #eee; max-width: 360px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h2>ESK PACKAGING LLC</h2>
+        <img src="${slip.logo}" alt="Company Logo" class="logo" />
+    </div>
+
+    <h1>PACKING SLIP</h1>
+
+    <div class="section">
+        <p><strong>Order #:</strong> ${slip.order_no}</p>
+    </div>
+
+    <div class="address-col">
+        <h3>Ship To</h3>
+        <p>${slip.ship_to.name}<br>
+            ${slip.ship_to.address}<br>
+            ${slip.ship_to.city}, ${slip.ship_to.state} ${slip.ship_to.zip}</p>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>SKU</th>
+                <th>Description</th>
+                <th>QTY</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${(slip.items || []).map(item => `
+            <tr>
+                <td>${item.stock || ''}</td>
+                <td>${item.title || ''}</td>
+                <td>${item.quantity || ''}</td>
+            </tr>
+            `).join('')}
+        </tbody>
+    </table>
+</body>
+</html>`;
+}
+
+// A pick/ship document, not a receipt - deliberately no prices/totals. Same
+// Puppeteer pattern as generateInvoicePDF above, reusing the same address
+// resolution (Shipment for "Ship To").
+const generatePackingSlipPDF = async (orderId) => {
+    const order = await Order.findByPk(orderId);
+    if (!order) throw new Error('Order not found');
+
+    const { OrderItem } = require('../db/models');
+    const orderItems = await OrderItem.findAll({ where: { orderId } });
+    const shipment = order.shipmentId ? await Shipment.findByPk(order.shipmentId) : null;
+
+    const logoPath = path.join(__dirname, '../public/images/ESK_icon.png');
+    let logoBase64 = '';
+    try {
+        const logoBuffer = fs.readFileSync(logoPath);
+        logoBase64 = `data:image/png;base64,${logoBuffer.toString('base64')}`;
+    } catch (err) {
+        logoBase64 = '';
+    }
+
+    const slip = {
+        order_no: order.orderNumber || order.id,
+        logo: logoBase64,
+        ship_to: {
+            name: shipment?.name || order?.name || '',
+            address: shipment?.secondline ? `${shipment?.firstline} ${shipment?.secondline}` : shipment?.firstline || '',
+            city: shipment?.city || order.city || '',
+            state: shipment?.state || order.state || '',
+            zip: shipment?.zip || order.zip || '',
+        },
+        items: orderItems.map(item => ({ stock: item.code || '', title: item.title || '', quantity: item.quantity || '' })),
+    };
+
+    const browser = await puppeteer.launch({
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--disable-gpu',
+        ]
+    });
+    const page = await browser.newPage();
+    await page.setContent(renderPackingSlipHTML(slip), { waitUntil: 'networkidle0' });
+    const pdfBuffer = await page.pdf({ format: 'A4', printBackground: true, margin: '10px' });
+    await browser.close();
+    return Buffer.from(pdfBuffer);
+};
+
 module.exports = {
     getInvoices,
     getInvoicesForAdmin,
-    generateInvoicePDF
+    generateInvoicePDF,
+    generatePackingSlipPDF,
 };

@@ -3,6 +3,8 @@ const axios = require("axios");
 const getUpsToken = require("../utils/getUpsToken");
 const findState = require("../utils/findState");
 const { getUpsBaseUrl } = require("../utils/upsBaseUrl");
+const { calculatePalletPacking } = require("../utils/palletPacking");
+const { Variant } = require("../db/models");
 
 const router = express.Router();
 
@@ -24,14 +26,89 @@ const defaultShipper = {
   },
 };
 
+// Resolves cart items (variantId + quantity) into real pack_* dimensions
+// from the DB and runs the pallet-packing calculation server-side - the
+// client never computes or sends package dimensions itself, so a stale/
+// tampered cart can't understate what actually ships.
+async function resolvePalletsFromItems(items) {
+  if (!Array.isArray(items) || items.length === 0) {
+    const err = new Error("items is required and must be a non-empty array");
+    err.status = 400;
+    throw err;
+  }
+
+  const variantIds = items.map((i) => i.variantId);
+  const variants = await Variant.findAll({ where: { id: variantIds } });
+  const variantById = new Map(variants.map((v) => [v.id, v]));
+
+  const packItems = items.map((i) => {
+    const variant = variantById.get(i.variantId);
+    if (!variant) {
+      const err = new Error(`Variant ${i.variantId} not found`);
+      err.status = 400;
+      throw err;
+    }
+    return {
+      sku: variant.title || String(variant.id),
+      length: variant.pack_length,
+      width: variant.pack_width,
+      height: variant.pack_height,
+      weight: variant.pack_weight,
+      quantity: i.quantity,
+    };
+  });
+
+  return calculatePalletPacking(packItems);
+}
+
+// Builds one UPS Package entry per pallet - previously only ever sent the
+// first pallet, making every pallet after the first invisible to the rate
+// quote.
+function palletsToUpsPackages(pallets) {
+  return pallets.map((p) => ({
+    PackagingType: {
+      Code: "02",
+      Description: "Package - Large or Pallet",
+    },
+    Dimensions: {
+      UnitOfMeasurement: { Code: "IN" },
+      Length: String(p.length),
+      Width: String(p.width),
+      Height: String(p.height),
+    },
+    PackageWeight: {
+      UnitOfMeasurement: { Code: "LBS" },
+      Weight: String(Math.ceil(p.weight)),
+    },
+  }));
+}
+
+// Same fix on the Taibeta side - one Commodities entry per pallet.
+function palletsToTaibetaCommodities(pallets) {
+  return pallets.map((p) => ({
+    HandlingQuantity: 1,
+    PackagingType: 120,
+    Length: p.length,
+    Width: p.width,
+    Height: p.height,
+    WeightTotal: Math.ceil(p.weight),
+    HazardousMaterial: false,
+    PiecesTotal: 1,
+    FreightClass: 1,
+    NMFC: "string",
+    Description: "string",
+    AdditionalMarkings: "string",
+    UNNumber: "string",
+    PackingGroup: 1,
+  }));
+}
+
 // POST /services/shipping-options
 router.post("/shipping-options", async (req, res) => {
-  const { recipient, packageDetails } = req.body;
-  console.log(req.body)
+  const { recipient, items } = req.body;
   let state;
   try {
     state = await findState(recipient.PostalCode);
-    console.log("state", state);
   } catch (err) {
     return res.status(400).json({ error: "Invalid or unsupported ZIP code" });
   }
@@ -43,21 +120,19 @@ router.post("/shipping-options", async (req, res) => {
     PostalCode: recipient.PostalCode,
     CountryCode: "US",
   };
-  // kontrol: tüm gerekli alanlar var mı?
-  const requiredFields = ["weight", "length", "width", "height"];
-  for (const field of requiredFields) {
-    if (!packageDetails[field]) {
-      return res
-        .status(400)
-        .json({ error: `Missing ${field} in packageDetails` });
-    }
+
+  let pallets;
+  try {
+    ({ pallets } = await resolvePalletsFromItems(items));
+  } catch (err) {
+    return res.status(err.status || 500).json({ error: err.message });
   }
+  const upsPackages = palletsToUpsPackages(pallets);
 
   try {
     const token = await getUpsToken();
     const results = await Promise.allSettled(
       Object.entries(serviceCodes).map(async ([code, name]) => {
-        console.log(name);
         const response = await axios.post(
           `${getUpsBaseUrl()}/api/rating/v1/Rate`,
           {
@@ -69,24 +144,7 @@ router.post("/shipping-options", async (req, res) => {
                   Name: "Customer",
                   Address: resolvedAddress,
                 },
-                Package: [
-                  {
-                    PackagingType: {
-                      Code: "02",
-                      Description: "Package - Large or Pallet",
-                    },
-                    Dimensions: {
-                      UnitOfMeasurement: { Code: "IN" },
-                      Length: packageDetails.length,
-                      Width: packageDetails.width,
-                      Height: packageDetails.height,
-                    },
-                    PackageWeight: {
-                      UnitOfMeasurement: { Code: "LBS" },
-                      Weight: packageDetails.weight,
-                    },
-                  },
-                ],
+                Package: upsPackages,
                 Service: { Code: code },
               },
             },
@@ -136,54 +194,53 @@ router.post("/shipping-options", async (req, res) => {
 
 
 router.post("/sending-options", async (req, res) => {
-  const { recipient, packageDetails} = req.body;
+  const { recipient, items } = req.body;
 
-    try {
-          const response = await axios.put(
-    "https://www.taibeta.net/PublicAPI/Shipping/getRateQuote",
-    {
-      authenticationKey: process.env.TAIBETA_API_KEY,
-      originZipCode: "11501",
-      destinationZipCode: recipient?.PostalCode,
-      Commodities: [
-        {
-          HandlingQuantity: 1,
-          PackagingType: 120,
-          Length: packageDetails.length,
-          Width: packageDetails.width,
-          Height: packageDetails.height,
-          WeightTotal: packageDetails.weight,
-          HazardousMaterial: false,
-          PiecesTotal: 1,
-          FreightClass: 1,
-          NMFC: "string",
-          Description: "string",
-          AdditionalMarkings: "string",
-          UNNumber: "string",
-          PackingGroup: 1,
-        },
-      ],
-      WeightUnits: 1,
-      DimensionUnits: 1,
-      LegacySupport: false,
-      CustomerReferenceNumber: "string",
-    },
-    // { timeout: 35000 }
-  );
-      if (!Array.isArray(response.data)) {
-        return res.status(500).json({ error: response.data });
-      }
-      const sortedResponse = response.data.sort((a, b) => a.priceTotal - b.priceTotal);
-      res.json(sortedResponse.slice(0, 10));
-    } catch (error) {
-        res.status(500).json({ error: error?.response?.data || error.message });
+  let pallets;
+  try {
+    ({ pallets } = await resolvePalletsFromItems(items));
+  } catch (err) {
+    return res.status(err.status || 500).json({ error: err.message });
+  }
+
+  try {
+    const response = await axios.put(
+      "https://www.taibeta.net/PublicAPI/Shipping/getRateQuote",
+      {
+        authenticationKey: process.env.TAIBETA_API_KEY,
+        originZipCode: "11501",
+        destinationZipCode: recipient?.PostalCode,
+        Commodities: palletsToTaibetaCommodities(pallets),
+        WeightUnits: 1,
+        DimensionUnits: 1,
+        LegacySupport: false,
+        CustomerReferenceNumber: "string",
+      },
+      // { timeout: 35000 }
+    );
+    if (!Array.isArray(response.data)) {
+      return res.status(500).json({ error: response.data });
     }
+    const sortedResponse = response.data.sort((a, b) => a.priceTotal - b.priceTotal);
+    res.json(sortedResponse.slice(0, 10));
+  } catch (error) {
+    res.status(500).json({ error: error?.response?.data || error.message });
+  }
 
 });
 
 
 router.post("/combined-shipping-options", async (req, res) => {
-  const { recipient, packageDetails } = req.body;
+  const { recipient, items } = req.body;
+
+  let pallets, totalWeight, totalDeci;
+  try {
+    ({ pallets, totalWeight, totalDeci } = await resolvePalletsFromItems(items));
+  } catch (err) {
+    return res.status(err.status || 500).json({ error: err.message });
+  }
+  const upsPackages = palletsToUpsPackages(pallets);
+  const taibetaCommodities = palletsToTaibetaCommodities(pallets);
 
   try {
     // UPS ve Taibeta API isteklerini Promise.all ile çalıştırıyoruz
@@ -211,21 +268,7 @@ router.post("/combined-shipping-options", async (req, res) => {
                           CountryCode: "US",
                         },
                       },
-                      Package: [
-                        {
-                          PackagingType: { Code: "02" },
-                          Dimensions: {
-                            UnitOfMeasurement: { Code: "IN" },
-                            Length: packageDetails.length,
-                            Width: packageDetails.width,
-                            Height: packageDetails.height,
-                          },
-                          PackageWeight: {
-                            UnitOfMeasurement: { Code: "LBS" },
-                            Weight: packageDetails.weight,
-                          },
-                        },
-                      ],
+                      Package: upsPackages,
                       Service: { Code: code },
                     },
                   },
@@ -272,31 +315,13 @@ router.post("/combined-shipping-options", async (req, res) => {
               destinationState: recipient?.StateProvinceCode || null,
               destinationCity: recipient?.City || null,
               destinationCountry: 1,
-              Commodities: [
-                {
-                  HandlingQuantity: 0,
-                  PackagingType: 120,
-                  Length: packageDetails.length,
-                  Width: packageDetails.width,
-                  Height: packageDetails.height,
-                  WeightTotal: packageDetails.weight,
-                  HazardousMaterial: false,
-                  PiecesTotal: 1,
-                  FreightClass: 1,
-                  NMFC: "string",
-                  Description: "string",
-                  AdditionalMarkings: "string",
-                  UNNumber: "string",
-                  PackingGroup: 1,
-                },
-              ],
+              Commodities: taibetaCommodities,
               WeightUnits: 1,
               DimensionUnits: 1,
               LegacySupport: false,
             },
             { timeout: 35000 }
           );
-            console.log(response)
           if (!Array.isArray(response.data)) return [];
 
           return response.data
@@ -318,14 +343,14 @@ router.post("/combined-shipping-options", async (req, res) => {
 
     // Her iki sağlayıcıdan gelen sonuçları birleştir, fiyata göre sırala ve ilk 6'sını gönder
     const combinedResults = [...(upsResult || []), ...(taibetaResult || [])];
-    
+
     // Fiyata göre sırala (en ucuzdan pahalıya)
     const sortedResults = combinedResults
       .filter(item => item.priceTotal !== null && item.priceTotal !== undefined)
       .sort((a, b) => parseFloat(a.priceTotal) - parseFloat(b.priceTotal))
       .slice(0, 6); // İlk 6 tane
 
-    res.json(sortedResults);
+    res.json({ options: sortedResults, packing: { pallets, totalWeight, totalDeci } });
   } catch (error) {
     console.error("Combined shipping error:", error.response?.data || error.message);
     res.status(500).json({ error: error?.response?.data || error.message });

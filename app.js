@@ -30,6 +30,7 @@ app.use(
     cors({
         origin: [
             "http://localhost:3000",
+            "http://localhost:3001",
             "https://esk-packaging-fe.vercel.app",
             "https://www.eskpackaging.com",
             // ESK_ADMIN (standalone admin panel, separate origin from ESK_FE)

@@ -6,10 +6,11 @@ const { saveShippingprofiles } = require('../controller/shippingProfile')
 const { getSpecialPricesForUser, upsertSpecialPrice, deleteSpecialPrice } = require('../controller/specialPriceController')
 const { getPricingAuditLogForUser } = require('../controller/pricingAuditController')
 const { deleteImageConnections } = require('../controller/imageController')
-const { getOrders, getSingleOrder, updateOrder, updateOrderStatus, completeOrder, refundOrder } = require('../controller/orderController')
+const { getOrders, getSingleOrder, updateOrder, updateOrderItems, updateOrderStatus, bulkUpdateOrderStatus, completeOrder, refundOrder, createManualOrder, resendOrderConfirmation, exportOrdersExcel } = require('../controller/orderController')
 const { getOrderAuditLog } = require('../controller/orderAuditController')
 const { getInvoicesForAdmin } = require('../controller/invoiceController')
 const { getShipments, getSingleShipment, updateShipment } = require('../controller/shipmentController')
+const { getCarrierStats } = require('../controller/carrierController')
 const { getShipmentStatus } = require('../controller/shipmentStatusController')
 const { uploadVariantExcel } = require('../controller/variantController')
 const { exportVariantsExcel, bulkImportVariantsExcel } = require('../controller/variantBulkController')
@@ -34,6 +35,40 @@ router.get('/orders/', async (req, res, next) => {
 	try {
 		if (!req.query) throw new AppError('Parametre Bulunamadi', 500)
 		const data = await getOrders(req.query)
+		res.status(200).send(data)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// GET /api/admin/orders/export - registered before /orders/:id, or Express
+// would treat "export" as the :id param.
+router.get('/orders/export', async (req, res, next) => {
+	try {
+		const buffer = await exportOrdersExcel(req.query)
+		res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+		res.setHeader('Content-Disposition', 'attachment; filename="orders.xlsx"')
+		res.status(200).send(buffer)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// POST /api/admin/orders/manual
+router.post('/orders/manual', async (req, res, next) => {
+	try {
+		const data = await createManualOrder(req.body, req.user?.id)
+		res.status(201).send(data)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// POST /api/admin/orders/bulk-status
+router.post('/orders/bulk-status', async (req, res, next) => {
+	try {
+		const { orderIds, orderStatusId } = req.body
+		const data = await bulkUpdateOrderStatus(orderIds, orderStatusId, req.user?.id)
 		res.status(200).send(data)
 	} catch (error) {
 		next(error)
@@ -84,11 +119,33 @@ router.post('/orders/complete/', async (req, res, next) => {
 	}
 })
 
-// POST /api/admin/orders/:id/refund
+// POST /api/admin/orders/:id/refund - body: { amount? } (dollars, partial refund)
 router.post('/orders/:id/refund', async (req, res, next) => {
 	try {
 		const { id } = req.params
-		const data = await refundOrder(id, req.user?.id)
+		const data = await refundOrder(id, req.user?.id, req.body?.amount)
+		res.status(200).send(data)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// PUT /api/admin/orders/:id/items
+router.put('/orders/:id/items', async (req, res, next) => {
+	try {
+		const { id } = req.params
+		const data = await updateOrderItems(id, req.body?.items, req.user?.id)
+		res.status(200).send(data)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// POST /api/admin/orders/:id/resend-confirmation
+router.post('/orders/:id/resend-confirmation', async (req, res, next) => {
+	try {
+		const { id } = req.params
+		const data = await resendOrderConfirmation(id)
 		res.status(200).send(data)
 	} catch (error) {
 		next(error)
@@ -145,6 +202,16 @@ router.get('/shipment/:id', async (req, res, next) => {
 router.get('/shipment-statuses', async (req, res, next) => {
 	try {
 		const data = await getShipmentStatus()
+		res.status(200).send(data)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// GET /api/admin/carrier-stats
+router.get('/carrier-stats', async (req, res, next) => {
+	try {
+		const data = await getCarrierStats()
 		res.status(200).send(data)
 	} catch (error) {
 		next(error)
