@@ -277,14 +277,22 @@ const getSingleOrder = async (id) => {
       {
         model: Shipment,
         attributes: [
-          "extra_informations"
-          ],
+          "extra_informations",
+          "totalPrice",
+          "totalWeight",
+          "totalDeci",
+          "tracking",
+        ],
+        include: [{ model: Carrier, attributes: ["id", "name"] }],
       },
       {
         model: Billing,
       },
       {
         model: Transaction,
+      },
+      {
+        model: OrderStatus,
       }
     ]
    })
