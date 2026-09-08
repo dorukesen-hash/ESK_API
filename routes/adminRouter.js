@@ -145,7 +145,7 @@ router.put('/orders/:id/items', async (req, res, next) => {
 router.post('/orders/:id/resend-confirmation', async (req, res, next) => {
 	try {
 		const { id } = req.params
-		const data = await resendOrderConfirmation(id)
+		const data = await resendOrderConfirmation(id, req.user?.id)
 		res.status(200).send(data)
 	} catch (error) {
 		next(error)

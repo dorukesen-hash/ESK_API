@@ -312,6 +312,13 @@ const getSingleOrder = async (id) => {
       },
       {
         model: OrderStatus,
+      },
+      {
+        model: DiscountCode,
+        attributes: ["id", "code", "type", "value"],
+      },
+      {
+        model: Invoice,
       }
     ]
    })
@@ -579,7 +586,7 @@ const sendOrderConfirmationEmail = async (order, orderItemsList, billingName, sh
   });
 };
 
-const resendOrderConfirmation = async (orderId) => {
+const resendOrderConfirmation = async (orderId, actorUserId) => {
   const order = await Order.findByPk(orderId);
   if (!order) throw new AppError('Order not found.', 404);
 
@@ -587,7 +594,17 @@ const resendOrderConfirmation = async (orderId) => {
   const billing = order.billingId ? await Billing.findByPk(order.billingId) : null;
   const shipment = order.shipmentId ? await Shipment.findByPk(order.shipmentId) : null;
 
-  await sendOrderConfirmationEmail(order, items, billing?.name, shipment?.totalPrice ?? order.shippingCharges);
+  try {
+    await sendOrderConfirmationEmail(order, items, billing?.name, shipment?.totalPrice ?? order.shippingCharges);
+    await logOrderChange({
+      orderId: order.id, actorUserId, action: 'email_sent', field: 'resend', oldValue: null, newValue: order.email,
+    });
+  } catch (err) {
+    await logOrderChange({
+      orderId: order.id, actorUserId, action: 'email_failed', field: 'resend', oldValue: null, newValue: err.message,
+    });
+    throw err;
+  }
   return { sent: true };
 };
 
@@ -778,6 +795,10 @@ const createOrder = async (data) => {
       console.warn(
         `Order price mismatch: variant ${variant.id}, user ${foundUser?.id ?? 'guest'} - client sent ${element.price}, server resolved ${resolvedTotal}`
       );
+      await logOrderChange({
+        orderId: newOrder.id, actorUserId: null, action: 'price_mismatch', field: `variant_${variant.id}`,
+        oldValue: element.price, newValue: resolvedTotal,
+      });
     }
     const finalPrice = resolvedTotal != null ? resolvedTotal : element.price;
 
@@ -813,8 +834,14 @@ const createOrder = async (data) => {
   // still be resent via resendOrderConfirmation.
   try {
     await sendOrderConfirmationEmail(newOrder, orderItems, newBilling.name, newShipping.totalPrice);
+    await logOrderChange({
+      orderId: newOrder.id, actorUserId: null, action: 'email_sent', field: 'initial', oldValue: null, newValue: newOrder.email,
+    });
   } catch (err) {
     console.error('Failed to send order confirmation email for order', newOrder.id, err);
+    await logOrderChange({
+      orderId: newOrder.id, actorUserId: null, action: 'email_failed', field: 'initial', oldValue: null, newValue: err.message,
+    });
   }
 
   // After everything is complete, clear the user's cart (set productArray to empty list)
@@ -982,6 +1009,21 @@ const createManualOrder = async (data, actorUserId) => {
     });
     newOrder.invoiceId = invoice.id;
     await newOrder.save();
+
+    // Mirrors createOrder's automatic confirmation email - a paid manual
+    // order is a completed sale just as much as a card order, and the
+    // customer should hear about it the same way.
+    try {
+      await sendOrderConfirmationEmail(newOrder, orderItems, newBilling.name, newShipping.totalPrice);
+      await logOrderChange({
+        orderId: newOrder.id, actorUserId: null, action: 'email_sent', field: 'initial', oldValue: null, newValue: newOrder.email,
+      });
+    } catch (err) {
+      console.error('Failed to send order confirmation email for manual order', newOrder.id, err);
+      await logOrderChange({
+        orderId: newOrder.id, actorUserId: null, action: 'email_failed', field: 'initial', oldValue: null, newValue: err.message,
+      });
+    }
   }
 
   await logOrderChange({
