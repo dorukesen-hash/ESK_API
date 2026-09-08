@@ -1,4 +1,4 @@
-const { Order, OrderItem, Customer, Shipment, OrderStatus, Billing, Carrier, ShipmentStatus, Invoice } = require('../db/models');
+const { Order, OrderItem, OrderItemRefund, Customer, Shipment, OrderStatus, Billing, Carrier, ShipmentStatus, Invoice } = require('../db/models');
 const { attachRefundTotals } = require('./orderController');
 
 const getAccountOrders = async (userId) => {
@@ -28,6 +28,16 @@ const getAccountOrders = async (userId) => {
                         "quantity",
                         "note",
                         "imgurl",
+                    ],
+                    // Same include getSingleOrder (admin) already uses -
+                    // immutable per-item refund log, never mutates this
+                    // OrderItem's own quantity/price. "Remaining quantity"
+                    // for an item is quantity - sum(these rows).
+                    include: [
+                        {
+                            model: OrderItemRefund,
+                            attributes: ["id", "quantity", "amount", "stripeRefundId", "createdAt"],
+                        },
                     ],
                 },
                 {
