@@ -1,11 +1,11 @@
 const models = require('../db/models')
-const { Order, OrderItem, Customer, Shipment, OrderStatus, User, Cart, Invoice, Transaction, Variant, VariantImages, Image, Carrier, DiscountCode, DiscountCodeRedemption } = models
+const { Order, OrderItem, Customer, Shipment, OrderStatus, User, Cart, Invoice, Transaction, Variant, VariantImages, Image, Carrier, DiscountCode, DiscountCodeRedemption, OrderItemRefund } = models
 const { Op } = require('sequelize')
 const { createAndWhere } = require('./scopes');
 const Billing = require('../db/models/billing');
 const sendEmail = require('../utils/sendEmail');
 const AppError = require('../utils/appError');
-const { resolveVariantPrice, resolveOrderPricing } = require('../utils/pricing');
+const { resolveVariantPrice, resolveOrderPricing, validateDiscountCode, computeDiscountAmount } = require('../utils/pricing');
 const { logOrderChange } = require('./orderAuditController');
 const { ensureCustomerForUser } = require('./customerController');
 const { calculatePalletPacking } = require('../utils/palletPacking');
@@ -283,6 +283,7 @@ const getSingleOrder = async (id) => {
           "note",
           "imgurl",
         ],
+        include: [{ model: OrderItemRefund, attributes: ["id", "quantity", "amount", "stripeRefundId", "createdAt"] }],
       },
       {
         model: Customer,
@@ -312,6 +313,13 @@ const getSingleOrder = async (id) => {
       },
       {
         model: OrderStatus,
+      },
+      {
+        model: DiscountCode,
+        attributes: ["id", "code", "type", "value"],
+      },
+      {
+        model: Invoice,
       }
     ]
    })
@@ -492,6 +500,93 @@ const refundOrder = async (orderId, actorUserId, amount) => {
   return { order, refund, isFullyRefunded, amountRefunded: totalRefundedCents / 100, amountTotal: paymentIntent.amount / 100 };
 };
 
+// Refunds a specific quantity from one order item - never touches
+// OrderItem.quantity/price (the original order record stays intact);
+// "remaining quantity" is always item.quantity minus the sum of these
+// rows, computed on read (see getSingleOrder's OrderItemRefund include).
+// For a Stripe-paid order this also issues a real, proportional Stripe
+// refund; for a manual order (no Transaction) there's nothing to call
+// Stripe for, so only the internal record is created - the actual money
+// movement (wire transfer, etc.) happens outside the system. This is
+// distinct from updateOrderItems, which is for correcting a mistake
+// (wrong price/quantity entered) and mutates the record directly.
+const refundOrderItem = async (orderId, orderItemId, quantity, actorUserId) => {
+  const order = await Order.findByPk(orderId);
+  if (!order) throw new AppError('Order not found.', 404);
+  if (!order.isPaid) throw new AppError('Order is not paid - nothing to refund.', 400);
+  if (order.orderstatusId === REFUNDED_STATUS_ID) throw new AppError('Order has already been refunded.', 400);
+
+  const item = await OrderItem.findOne({ where: { id: orderItemId, orderId } });
+  if (!item) throw new AppError('Order item not found on this order.', 404);
+
+  const qty = parseInt(quantity, 10);
+  if (!(qty > 0)) throw new AppError('Refund quantity must be greater than zero.', 400);
+
+  // The auto-generated FK attribute is "orderitemId" (lowercase "item"),
+  // not "orderItemId" - it's derived from the target model's literal
+  // db.define() name ('orderitem', no internal camelCase), same gotcha as
+  // OrderItem's own "variant_id" association elsewhere in this file.
+  const priorRefunds = await OrderItemRefund.findAll({ where: { orderitemId: orderItemId } });
+  const alreadyRefunded = priorRefunds.reduce((sum, r) => sum + r.quantity, 0);
+  const remaining = item.quantity - alreadyRefunded;
+  if (qty > remaining) {
+    throw new AppError(`Only ${remaining} unit(s) remain to be refunded on this item.`, 400);
+  }
+
+  const unitPrice = item.quantity > 0 ? Number(item.price) / item.quantity : 0;
+  const amount = Math.round(unitPrice * qty * 100) / 100;
+
+  const transaction = await Transaction.findOne({ where: { orderId }, order: [['id', 'DESC']] });
+  let stripeRefundId = null;
+  if (transaction?.payment_id) {
+    const refund = await stripe.refunds.create({ payment_intent: transaction.payment_id, amount: Math.round(amount * 100) });
+    stripeRefundId = refund.id;
+  }
+
+  await OrderItemRefund.create({ orderitemId: orderItemId, quantity: qty, amount, stripeRefundId, actorUserId });
+
+  await logOrderChange({
+    orderId, actorUserId, action: 'item_refund', field: item.title,
+    oldValue: remaining, newValue: remaining - qty,
+  });
+
+  // Flip the order to Refunded once everything's actually back - Stripe's
+  // own totals are the source of truth when there's a real payment (same
+  // reasoning as attachRefundTotals/refundOrder); for a manual order,
+  // compare the internal ledger against the stored order total instead.
+  const oldStatusId = order.orderstatusId;
+  let isFullyRefunded = false;
+  if (transaction?.payment_id) {
+    const paymentIntent = await stripe.paymentIntents.retrieve(transaction.payment_id);
+    const refundsList = await stripe.refunds.list({ payment_intent: transaction.payment_id, limit: 100 });
+    const totalRefundedCents = refundsList.data.reduce((sum, r) => sum + r.amount, 0);
+    isFullyRefunded = totalRefundedCents >= paymentIntent.amount;
+  } else {
+    // order.price nets out any order-level discount and includes shipping,
+    // neither of which item-level refunds (based on each OrderItem's own,
+    // never-discount-adjusted price) can ever add up to - compare against
+    // the items' own undiscounted subtotal instead. Shipping/discount
+    // reconciliation for a full-order refund stays a manual staff decision,
+    // same as updateOrderItems already disclaims for Stripe.
+    const allItems = await OrderItem.findAll({ where: { orderId }, include: [{ model: OrderItemRefund }] });
+    const itemsSubtotal = allItems.reduce((sum, i) => sum + Number(i.price), 0);
+    const totalRefunded = allItems.reduce(
+      (sum, i) => sum + (i.order_item_refunds || []).reduce((s, r) => s + Number(r.amount), 0),
+      0
+    );
+    isFullyRefunded = itemsSubtotal > 0 && totalRefunded >= itemsSubtotal;
+  }
+  if (isFullyRefunded) {
+    order.orderstatusId = REFUNDED_STATUS_ID;
+    await order.save();
+    await logOrderChange({
+      orderId: order.id, actorUserId, action: 'status_change', field: 'orderstatusId', oldValue: oldStatusId, newValue: REFUNDED_STATUS_ID,
+    });
+  }
+
+  return { item, quantity: qty, amount, remaining: remaining - qty, isFullyRefunded };
+};
+
 // Corrects an order's line items after the fact (wrong quantity, added/
 // removed a product, etc.) - `items` is the admin's full desired list, not
 // a delta. Recomputes and stores the new Order.price, but never touches
@@ -579,7 +674,7 @@ const sendOrderConfirmationEmail = async (order, orderItemsList, billingName, sh
   });
 };
 
-const resendOrderConfirmation = async (orderId) => {
+const resendOrderConfirmation = async (orderId, actorUserId) => {
   const order = await Order.findByPk(orderId);
   if (!order) throw new AppError('Order not found.', 404);
 
@@ -587,7 +682,17 @@ const resendOrderConfirmation = async (orderId) => {
   const billing = order.billingId ? await Billing.findByPk(order.billingId) : null;
   const shipment = order.shipmentId ? await Shipment.findByPk(order.shipmentId) : null;
 
-  await sendOrderConfirmationEmail(order, items, billing?.name, shipment?.totalPrice ?? order.shippingCharges);
+  try {
+    await sendOrderConfirmationEmail(order, items, billing?.name, shipment?.totalPrice ?? order.shippingCharges);
+    await logOrderChange({
+      orderId: order.id, actorUserId, action: 'email_sent', field: 'resend', oldValue: null, newValue: order.email,
+    });
+  } catch (err) {
+    await logOrderChange({
+      orderId: order.id, actorUserId, action: 'email_failed', field: 'resend', oldValue: null, newValue: err.message,
+    });
+    throw err;
+  }
   return { sent: true };
 };
 
@@ -778,6 +883,10 @@ const createOrder = async (data) => {
       console.warn(
         `Order price mismatch: variant ${variant.id}, user ${foundUser?.id ?? 'guest'} - client sent ${element.price}, server resolved ${resolvedTotal}`
       );
+      await logOrderChange({
+        orderId: newOrder.id, actorUserId: null, action: 'price_mismatch', field: `variant_${variant.id}`,
+        oldValue: element.price, newValue: resolvedTotal,
+      });
     }
     const finalPrice = resolvedTotal != null ? resolvedTotal : element.price;
 
@@ -813,8 +922,14 @@ const createOrder = async (data) => {
   // still be resent via resendOrderConfirmation.
   try {
     await sendOrderConfirmationEmail(newOrder, orderItems, newBilling.name, newShipping.totalPrice);
+    await logOrderChange({
+      orderId: newOrder.id, actorUserId: null, action: 'email_sent', field: 'initial', oldValue: null, newValue: newOrder.email,
+    });
   } catch (err) {
     console.error('Failed to send order confirmation email for order', newOrder.id, err);
+    await logOrderChange({
+      orderId: newOrder.id, actorUserId: null, action: 'email_failed', field: 'initial', oldValue: null, newValue: err.message,
+    });
   }
 
   // After everything is complete, clear the user's cart (set productArray to empty list)
@@ -931,7 +1046,20 @@ const createManualOrder = async (data, actorUserId) => {
     itemsTotal += price;
   }
   const shippingPrice = parseFloat(shipping?.price) || 0;
-  const totalPrice = itemsTotal + shippingPrice;
+
+  // Admin-applied discount code - reuses the exact same validation/amount
+  // logic real checkout uses (utils/pricing.js), just triggered manually
+  // instead of automatically. No "vs. the customer's blanket discount,
+  // whichever is bigger" comparison here (unlike resolveOrderPricing) -
+  // item prices are already admin-entered directly, so that comparison
+  // doesn't apply.
+  let appliedDiscountCode = null;
+  let discountAmount = 0;
+  if (data.discountCode) {
+    appliedDiscountCode = await validateDiscountCode(data.discountCode, { subtotal: itemsTotal, user: foundUser, models });
+    discountAmount = computeDiscountAmount(appliedDiscountCode, itemsTotal);
+  }
+  const totalPrice = itemsTotal - discountAmount + shippingPrice;
 
   const newOrder = await Order.create({
     name: recipient?.name || myCustomer.name || '',
@@ -955,7 +1083,18 @@ const createManualOrder = async (data, actorUserId) => {
     uniqueId: generateCustomUniqueId(),
     orderNumber: nextOrderNumber.toString(),
     extra_informations: paymentNote ? { adminNote: paymentNote } : null,
+    discountCodeId: appliedDiscountCode ? appliedDiscountCode.id : null,
+    discountAmount: appliedDiscountCode ? discountAmount : null,
   });
+
+  if (appliedDiscountCode) {
+    await DiscountCode.increment('timesUsed', { by: 1, where: { id: appliedDiscountCode.id } });
+    await DiscountCodeRedemption.create({
+      discountCodeId: appliedDiscountCode.id,
+      userId: foundUser?.id || null,
+      orderId: newOrder.id,
+    });
+  }
 
   const orderItems = [];
   for (const row of itemRows) {
@@ -982,6 +1121,21 @@ const createManualOrder = async (data, actorUserId) => {
     });
     newOrder.invoiceId = invoice.id;
     await newOrder.save();
+
+    // Mirrors createOrder's automatic confirmation email - a paid manual
+    // order is a completed sale just as much as a card order, and the
+    // customer should hear about it the same way.
+    try {
+      await sendOrderConfirmationEmail(newOrder, orderItems, newBilling.name, newShipping.totalPrice);
+      await logOrderChange({
+        orderId: newOrder.id, actorUserId: null, action: 'email_sent', field: 'initial', oldValue: null, newValue: newOrder.email,
+      });
+    } catch (err) {
+      console.error('Failed to send order confirmation email for manual order', newOrder.id, err);
+      await logOrderChange({
+        orderId: newOrder.id, actorUserId: null, action: 'email_failed', field: 'initial', oldValue: null, newValue: err.message,
+      });
+    }
   }
 
   await logOrderChange({
@@ -1050,6 +1204,7 @@ module.exports = {
     bulkUpdateOrderStatus,
     completeOrder,
     refundOrder,
+    refundOrderItem,
     resendOrderConfirmation,
     exportOrdersExcel,
     attachRefundTotals,

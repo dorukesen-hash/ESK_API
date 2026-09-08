@@ -6,7 +6,7 @@ const { saveShippingprofiles } = require('../controller/shippingProfile')
 const { getSpecialPricesForUser, upsertSpecialPrice, deleteSpecialPrice } = require('../controller/specialPriceController')
 const { getPricingAuditLogForUser } = require('../controller/pricingAuditController')
 const { deleteImageConnections } = require('../controller/imageController')
-const { getOrders, getSingleOrder, updateOrder, updateOrderItems, updateOrderStatus, bulkUpdateOrderStatus, completeOrder, refundOrder, createManualOrder, resendOrderConfirmation, exportOrdersExcel } = require('../controller/orderController')
+const { getOrders, getSingleOrder, updateOrder, updateOrderItems, updateOrderStatus, bulkUpdateOrderStatus, completeOrder, refundOrder, refundOrderItem, createManualOrder, resendOrderConfirmation, exportOrdersExcel } = require('../controller/orderController')
 const { getOrderAuditLog } = require('../controller/orderAuditController')
 const { getInvoicesForAdmin } = require('../controller/invoiceController')
 const { getShipments, getSingleShipment, updateShipment } = require('../controller/shipmentController')
@@ -130,6 +130,17 @@ router.post('/orders/:id/refund', async (req, res, next) => {
 	}
 })
 
+// POST /api/admin/orders/:id/items/:itemId/refund - body: { quantity }
+router.post('/orders/:id/items/:itemId/refund', async (req, res, next) => {
+	try {
+		const { id, itemId } = req.params
+		const data = await refundOrderItem(id, itemId, req.body?.quantity, req.user?.id)
+		res.status(200).send(data)
+	} catch (error) {
+		next(error)
+	}
+})
+
 // PUT /api/admin/orders/:id/items
 router.put('/orders/:id/items', async (req, res, next) => {
 	try {
@@ -145,7 +156,7 @@ router.put('/orders/:id/items', async (req, res, next) => {
 router.post('/orders/:id/resend-confirmation', async (req, res, next) => {
 	try {
 		const { id } = req.params
-		const data = await resendOrderConfirmation(id)
+		const data = await resendOrderConfirmation(id, req.user?.id)
 		res.status(200).send(data)
 	} catch (error) {
 		next(error)

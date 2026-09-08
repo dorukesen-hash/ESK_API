@@ -38,6 +38,7 @@ const DiscountCode = require('./discountCode')
 const DiscountCodeRedemption = require('./discountCodeRedemption')
 const PricingAuditLog = require('./pricingAuditLog')
 const OrderAuditLog = require('./orderAuditLog')
+const OrderItemRefund = require('./orderItemRefund')
 
 
 User.hasMany(Category);
@@ -232,6 +233,13 @@ OrderAuditLog.belongsTo(Order, { constraints: false })
 User.hasMany(OrderAuditLog, { as: 'orderAuditActions', foreignKey: 'actorUserId' })
 OrderAuditLog.belongsTo(User, { as: 'actor', foreignKey: 'actorUserId' })
 
+// Item-level refund log - never mutates OrderItem itself, see the model's
+// own comment for why.
+OrderItem.hasMany(OrderItemRefund)
+OrderItemRefund.belongsTo(OrderItem)
+User.hasMany(OrderItemRefund, { as: 'itemRefundActions', foreignKey: 'actorUserId' })
+OrderItemRefund.belongsTo(User, { as: 'actor', foreignKey: 'actorUserId' })
+
 
 module.exports = {
 		User,
@@ -273,5 +281,6 @@ module.exports = {
 		DiscountCode,
 		DiscountCodeRedemption,
 		PricingAuditLog,
-		OrderAuditLog
+		OrderAuditLog,
+		OrderItemRefund
 	};
