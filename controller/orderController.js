@@ -805,8 +805,17 @@ const createOrder = async (data) => {
     });
   }
 
-  // Send order success email
-  await sendOrderConfirmationEmail(newOrder, orderItems, newBilling.name, newShipping.totalPrice);
+  // Send order success email - isolated from order creation on purpose: by
+  // this point the order is already saved and payment already captured, so
+  // an SMTP failure (sendEmail now actually propagates those, see
+  // utils/sendEmail.js) must not turn into a failed-order response for a
+  // customer who has, in fact, successfully ordered and paid. The order can
+  // still be resent via resendOrderConfirmation.
+  try {
+    await sendOrderConfirmationEmail(newOrder, orderItems, newBilling.name, newShipping.totalPrice);
+  } catch (err) {
+    console.error('Failed to send order confirmation email for order', newOrder.id, err);
+  }
 
   // After everything is complete, clear the user's cart (set productArray to empty list)
   try {

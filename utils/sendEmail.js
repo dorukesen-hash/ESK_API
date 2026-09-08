@@ -69,14 +69,15 @@ const sendEmail = async (options) => {
             },
         ],
     }
-    console.log(mailOptions)
-    transporter.sendMail(mailOptions, function (error, info) {
-        if (error) {
-            console.log(error)
-        } else {
-            console.log('Email sent: ' + info.response)
-        }
-    })
+    // sendMail's callback form resolved this whole function immediately,
+    // before the SMTP transaction (or any connection failure) actually
+    // completed - callers awaiting sendEmail() saw a resolved promise and
+    // reported success regardless of what really happened, and a real SMTP
+    // error only ever reached the server console, never the caller. Using
+    // the promise form (no callback) makes this function actually wait for
+    // and propagate the real result.
+    const info = await transporter.sendMail(mailOptions)
+    console.log('Email sent: ' + info.response)
 }
 
 module.exports = sendEmail
