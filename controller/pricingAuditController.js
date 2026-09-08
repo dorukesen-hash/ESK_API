@@ -31,7 +31,7 @@ const getPricingAuditLogForUser = async (targetUserId) => {
         where: { targetUserId },
         include: [
             { model: User, as: 'actor', attributes: ['id', 'name', 'surname', 'email'] },
-            { model: Variant, attributes: ['id', 'title', 'stock'] },
+            { model: Variant, attributes: ['id', 'title', 'sku'] },
         ],
         order: [['createdAt', 'DESC']],
     });

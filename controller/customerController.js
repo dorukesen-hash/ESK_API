@@ -90,7 +90,7 @@ const getCustomerDetailForAdmin = async (id) => {
         userId
             ? SpecialPrices.findAll({
                   where: { userId },
-                  include: [{ model: Variant, attributes: ['id', 'title', 'stock'] }],
+                  include: [{ model: Variant, attributes: ['id', 'title', 'sku'] }],
                   order: [['id', 'ASC']],
               })
             : [],

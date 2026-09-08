@@ -6,7 +6,11 @@ const Variant = db.define("variant", {
     type: Sequelize.TEXT,
     allowNull: true,
   },
-  stock: {
+  // The product SKU (e.g. "EB20020010006W") - was misleadingly named
+  // "stock" for years even though there's no inventory-count feature
+  // anywhere in this system; this has always held a SKU string, never a
+  // quantity.
+  sku: {
     type: Sequelize.STRING,
     allowNull: true,
   },

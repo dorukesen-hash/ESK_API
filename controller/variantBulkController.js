@@ -76,7 +76,7 @@ const bulkImportVariantsExcel = async (fileBuffer, userId) => {
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     const rowNumber = i + 2; // header is row 1
-    const stockLabel = row["Stock #"] || row["Title"] || `row ${rowNumber}`;
+    const skuLabel = row["SKU"] || row["Title"] || `row ${rowNumber}`;
 
     try {
       const id = row["ID"] ? parseInt(row["ID"]) : null;
@@ -84,7 +84,7 @@ const bulkImportVariantsExcel = async (fileBuffer, userId) => {
       if (id) {
         const existing = await Variant.findByPk(id);
         if (!existing) {
-          result.failed.push({ row: rowNumber, stock: stockLabel, reason: `Variant ID ${id} not found` });
+          result.failed.push({ row: rowNumber, sku: skuLabel, reason: `Variant ID ${id} not found` });
           continue;
         }
 
@@ -100,7 +100,7 @@ const bulkImportVariantsExcel = async (fileBuffer, userId) => {
           changedFields[column.field] = parsed.value;
         }
         if (invalidColumn) {
-          result.failed.push({ row: rowNumber, stock: stockLabel, reason: `Invalid value for "${invalidColumn}"` });
+          result.failed.push({ row: rowNumber, sku: skuLabel, reason: `Invalid value for "${invalidColumn}"` });
           continue;
         }
 
@@ -121,15 +121,15 @@ const bulkImportVariantsExcel = async (fileBuffer, userId) => {
           variantData[column.field] = parsed.value;
         }
         if (invalidColumn) {
-          result.failed.push({ row: rowNumber, stock: stockLabel, reason: `Invalid value for "${invalidColumn}"` });
+          result.failed.push({ row: rowNumber, sku: skuLabel, reason: `Invalid value for "${invalidColumn}"` });
           continue;
         }
 
-        if (!variantData.stock || !variantData.title) {
+        if (!variantData.sku || !variantData.title) {
           result.failed.push({
             row: rowNumber,
-            stock: stockLabel,
-            reason: "Title and Stock # are required to create a variant",
+            sku: skuLabel,
+            reason: "Title and SKU are required to create a variant",
           });
           continue;
         }
@@ -141,7 +141,7 @@ const bulkImportVariantsExcel = async (fileBuffer, userId) => {
         if (productName) {
           const product = findByName(products, productName, "title");
           if (!product) {
-            result.failed.push({ row: rowNumber, stock: stockLabel, reason: `Product "${productName}" not found` });
+            result.failed.push({ row: rowNumber, sku: skuLabel, reason: `Product "${productName}" not found` });
             continue;
           }
           variantData.productId = product.id;
@@ -152,7 +152,7 @@ const bulkImportVariantsExcel = async (fileBuffer, userId) => {
           if (!subcategory) {
             result.failed.push({
               row: rowNumber,
-              stock: stockLabel,
+              sku: skuLabel,
               reason: `Subcategory "${subcategoryName}" not found`,
             });
             continue;
@@ -162,14 +162,14 @@ const bulkImportVariantsExcel = async (fileBuffer, userId) => {
         } else if (categoryName) {
           const category = findByName(categories, categoryName, "name");
           if (!category) {
-            result.failed.push({ row: rowNumber, stock: stockLabel, reason: `Category "${categoryName}" not found` });
+            result.failed.push({ row: rowNumber, sku: skuLabel, reason: `Category "${categoryName}" not found` });
             continue;
           }
           variantData.categoryId = category.id;
         } else {
           result.failed.push({
             row: rowNumber,
-            stock: stockLabel,
+            sku: skuLabel,
             reason: "New variant rows need a Category, Subcategory, or Product",
           });
           continue;
@@ -180,7 +180,7 @@ const bulkImportVariantsExcel = async (fileBuffer, userId) => {
         result.created += 1;
       }
     } catch (error) {
-      result.failed.push({ row: rowNumber, stock: stockLabel, reason: error.message || "Unknown error" });
+      result.failed.push({ row: rowNumber, sku: skuLabel, reason: error.message || "Unknown error" });
     }
   }
 

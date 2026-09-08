@@ -5,7 +5,7 @@ const { logSpecialPriceChange } = require('./pricingAuditController');
 const getSpecialPricesForUser = async (userId) => {
     return await SpecialPrices.findAll({
         where: { userId },
-        include: [{ model: Variant, attributes: ['id', 'title', 'stock'] }],
+        include: [{ model: Variant, attributes: ['id', 'title', 'sku'] }],
         order: [['id', 'ASC']],
     });
 };
