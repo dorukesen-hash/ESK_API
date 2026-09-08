@@ -28,7 +28,17 @@ router.post("/register", async (req, res) => {
     const existingUser = await getUserByEmail(email);
     console.log("workflow here");
     if (existingUser)
-      return res.status(400).json({ message: "Email already exists" });
+      // Deliberately does NOT attach this password to the existing account,
+      // even if it was created via Google and has no password yet -
+      // registration is unauthenticated, so silently accepting a
+      // stranger-supplied password here would let anyone take over an
+      // account just by knowing its email. The secure way to add a
+      // password to a Google-created account is the existing forgot-
+      // password flow, which proves ownership of the email first.
+      return res.status(400).json({
+        message:
+          "An account with this email already exists. Log in, or use \"Forgot your password?\" if you originally signed up with Google.",
+      });
 
     //hash password
     const hashedPassword = await bcrypt.hash(password, 10);
