@@ -236,10 +236,11 @@ router.post("/forgot-password", async (req, res) => {
       await sendPasswordResetEmail(user);
       console.log("Reset email sent to:", user.email);
     } catch (err) {
-      return res.status(200).json({ err });
+      console.error("Failed to send password reset email:", err);
+      return res.status(200).json({ message: genericMessage });
     }
 
-    return res.status(200).json({ user });
+    return res.status(200).json({ message: genericMessage });
   } catch (error) {
     return res.status(200).json({ message: genericMessage });
   }
