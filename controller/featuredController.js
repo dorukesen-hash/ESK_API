@@ -21,7 +21,7 @@ const getVariantsForFeatured = async (data) => {
 	  const searchField = {
 		  [Op.or]: [
 			  { title: { [Op.iLike]: `%${searchValue}%` } },
-			  { stock: { [Op.iLike]: `%${searchValue}%` } },
+			  { sku: { [Op.iLike]: `%${searchValue}%` } },
 		  ],
 	  }
 
@@ -36,7 +36,7 @@ const getVariantsForFeatured = async (data) => {
 	attributes: [
       "id",
 	  "title",
-	  "stock"
+	  "sku"
     ],
 	})
 
@@ -51,7 +51,7 @@ const getVariantsForFeatured = async (data) => {
 const getFeaturedSources = async () => {
   const rows = await Featured.findAll({
     attributes: ["source_id"],
-    include: [{ model: Variant, as: "source", attributes: ["id", "stock", "title"] }],
+    include: [{ model: Variant, as: "source", attributes: ["id", "sku", "title"] }],
     order: [["source_id", "ASC"]],
   });
 
@@ -61,7 +61,7 @@ const getFeaturedSources = async () => {
       bySource.set(row.source_id, {
         id: row.source.id,
         title: row.source.title,
-        stock: row.source.stock,
+        sku: row.source.sku,
         targetCount: 0,
       });
     }
@@ -75,8 +75,8 @@ const getFeaturedProduct = async (id) => {
     where: { source_id: id },
 	attributes:["source_id","target_id"],
     include: [
-		{ model: Variant, as: "source", attributes: ["stock","title"] },
-        { model: Variant, as: "target",attributes: ["stock","title"] }
+		{ model: Variant, as: "source", attributes: ["sku","title"] },
+        { model: Variant, as: "target",attributes: ["sku","title"] }
 
 	],
   });

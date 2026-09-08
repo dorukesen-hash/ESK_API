@@ -34,7 +34,7 @@ const getVariant = async (id, user) => {
         {
           model: Variant,
           as: "target",
-          attributes: ["id", "stock", "title"],
+          attributes: ["id", "sku", "title"],
         },
       ],
     },
@@ -100,7 +100,6 @@ const saveVariant = async (data) => {
     width,
     height,
     length,
-    stock,
     type,
     subcategoryId,
     productId,
@@ -108,6 +107,10 @@ const saveVariant = async (data) => {
 
   let newVariant;
 
+  // sku is a string (e.g. "EB20020010006W") - `...data` already carries it
+  // through untouched. It used to be run through parseInt() here (back
+  // when this field was misleadingly named "stock"), which silently
+  // mangled any alphanumeric SKU.
   if (type === "Subcategory") {
     newVariant = await Variant.create({
       ...data,
@@ -115,7 +118,6 @@ const saveVariant = async (data) => {
       width: parseFloat(width),
       height: parseFloat(height),
       length: parseFloat(length),
-      stock: parseInt(stock),
       subcategoryId: subcategoryId,
     });
   } else if (type === "Product") {
@@ -125,7 +127,6 @@ const saveVariant = async (data) => {
       width: parseFloat(width),
       height: parseFloat(height),
       length: parseFloat(length),
-      stock: parseInt(stock),
       productId: productId,
     });
   }
@@ -177,7 +178,7 @@ const uploadVariantExcel = async (hierarchyType, hierarchyId, fileBuffer, userId
   }
 
   // Zorunlu alan kontrolü
-  rowObject = rowObject.filter((row) => row["Stock #"] && row["Title"]);
+  rowObject = rowObject.filter((row) => row["SKU"] && row["Title"]);
   if (rowObject.length === 0)
     throw new AppError("Excel listesi boş veya geçersiz.", 400);
 
@@ -194,7 +195,7 @@ const uploadVariantExcel = async (hierarchyType, hierarchyId, fileBuffer, userId
       // Variant tablosuna kayıt
       const variantData = {
         title: line["Title"] || "",
-        stock: line["Stock #"] || "",
+        sku: line["SKU"] || "",
         one_four_units: line["1–4 Units"] ? parseFloat(line["1–4 Units"]) : null,
         five_nine_units: line["5–9 Units"] ? parseFloat(line["5–9 Units"]) : null,
         ten_plus_units: line["10+ Units"] ? parseFloat(line["10+ Units"]) : null,
@@ -360,8 +361,8 @@ const uploadVariantExcel = async (hierarchyType, hierarchyId, fileBuffer, userId
       const created = await Variant.create(variantData);
       await logVariantCreate(created.id, userId, created);
     } catch (error) {
-      console.error("Hata:", line["Stock #"], error);
-      throw new AppError(`Variant oluşturulamadı: ${line["Stock #"]}`, 500);
+      console.error("Hata:", line["SKU"], error);
+      throw new AppError(`Variant oluşturulamadı: ${line["SKU"]}`, 500);
     }
   }
 };

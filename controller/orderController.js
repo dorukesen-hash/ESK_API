@@ -626,7 +626,7 @@ const updateOrderItems = async (orderId, items, actorUserId) => {
       const imageUrl = variant?.variant_images?.length > 0 ? variant.variant_images[0]?.url : null;
       const created = await OrderItem.create({
         title: item.title || variant?.title || '',
-        code: variant?.stock || item.code || '',
+        code: variant?.sku || item.code || '',
         price,
         quantity,
         orderId,
@@ -892,7 +892,7 @@ const createOrder = async (data) => {
 
   const createdItem = await OrderItem.create({
       title: variant.title,
-      code: variant.stock,
+      code: variant.sku,
       price: finalPrice,
       quantity: element.quantity,
       orderId: newOrder.id,
@@ -1037,7 +1037,7 @@ const createManualOrder = async (data, actorUserId) => {
     const imageUrl = variant?.variant_images?.length > 0 ? variant.variant_images[0]?.url : null;
     itemRows.push({
       title: item.title || variant?.title || '',
-      code: variant?.stock || item.code || '',
+      code: variant?.sku || item.code || '',
       price,
       quantity,
       imgurl: imageUrl,
