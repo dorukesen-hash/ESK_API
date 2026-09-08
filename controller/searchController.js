@@ -30,7 +30,7 @@ const searchBarFunc = async (data) => {
     attributes: [
       "id",
       "title",
-      "stock"
+      "sku"
     ],
     include: [
         {

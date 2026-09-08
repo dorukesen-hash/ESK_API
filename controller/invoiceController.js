@@ -156,7 +156,11 @@ const generateInvoicePDF = async (orderId) => {
 
     // Build invoice line items from orderItems
     let invoiceLineItems = orderItems.map((item, idx) => ({
-        stock: item.stock || '',
+        // item.stock never existed on OrderItem (that field is code) - the
+        // invoice's SKU column has been rendering blank for every invoice.
+        // Matches generatePackingSlipPDF's identical, already-correct
+        // stock: item.code mapping below.
+        stock: item.code || '',
         title: item.title || '',
         quantity: item.quantity || '',
         price: item.price || '',

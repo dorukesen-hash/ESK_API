@@ -59,7 +59,7 @@ const getSubCategoriesforAdmin = async (searchItem) => {
           Object.keys(categoryWhere).length > 0 ? categoryWhere : undefined,
         required: false,
       },
-      { model: Variant, attributes: ["id", "title", "stock"] },
+      { model: Variant, attributes: ["id", "title", "sku"] },
       { model: Product, attributes: ["id", "title"] },
       { model: SubcategoryImages, include: [{ model: Image }], separate: true, order: [["position", "ASC"]] },
     ],
@@ -152,12 +152,15 @@ const updateSubCategoryAdmin = async (data) => {
           );
         } else {
           // Mevcut varyantı güncelle
+          // sku/stockLevel used to be listed here too, but those are
+          // Product-model fields, not Variant ones - always silently
+          // dropped by Sequelize (a copy-paste artifact). Removed rather
+          // than left in place now that Variant has a real `sku` column of
+          // its own (see the stock->sku rename) - inline-editing a
+          // variant's SKU from this embedded list was never actually
+          // wired up; use the main Variants grid for that.
           await Variant.update(
-            {
-              title: variant.title,
-              sku: variant.sku,
-              stockLevel: variant.stockLevel,
-            },
+            { title: variant.title },
             { where: { id: variant.id } }
           );
         }
@@ -197,7 +200,7 @@ const getProductsforAdmin = async (searchItem) => {
     include: [
       { model: Category, attributes: ["id", "name"] },
       { model: Subcategory, attributes: ["id", "name"] },
-      { model: Variant, attributes: ["id", "title", "stock"] },
+      { model: Variant, attributes: ["id", "title", "sku"] },
       { model: ProductImages, include: [{ model: Image }], separate: true, order: [["position", "ASC"]] },
     ],
   });
@@ -227,7 +230,6 @@ const addProductAdmin = async (data) => {
   if (variants && variants.length > 0) {
     const variantCreateList = variants.map((item) => ({
       ...item,
-      stock: item.stock,
       categoryId: categoryId,
       subcategoryId: subcategoryId,
       productId: product.id,
@@ -290,12 +292,15 @@ const updateProductAdmin = async (data) => {
           });
         } else {
           // Mevcut varyantı güncelle
+          // sku/stockLevel used to be listed here too, but those are
+          // Product-model fields, not Variant ones - always silently
+          // dropped by Sequelize (a copy-paste artifact). Removed rather
+          // than left in place now that Variant has a real `sku` column of
+          // its own (see the stock->sku rename) - inline-editing a
+          // variant's SKU from this embedded list was never actually
+          // wired up; use the main Variants grid for that.
           await Variant.update(
-            {
-              title: variant.title,
-              sku: variant.sku,
-              stockLevel: variant.stockLevel,
-            },
+            { title: variant.title },
             { where: { id: variant.id } }
           );
         }
@@ -336,7 +341,7 @@ const getVariantsForAdmin = async (data) => {
             [Op.iLike]: `%${decodeURIComponent(globalFilter)}%`,
           },
         },
-        { stock: { [Op.iLike]: `%${decodeURIComponent(globalFilter)}%` } },
+        { sku: { [Op.iLike]: `%${decodeURIComponent(globalFilter)}%` } },
       ],
     });
   }

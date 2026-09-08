@@ -15,7 +15,7 @@
 // the same class of model/DB drift already documented for the Claim model's
 // timestamp columns; mirrored in ESK_ADMIN's variantFieldConfig.js.
 const VARIANT_EXCEL_COLUMNS = [
-  { field: "stock", header: "Stock #", type: "text" },
+  { field: "sku", header: "SKU", type: "text" },
   { field: "title", header: "Title", type: "text" },
   { field: "featured", header: "Featured", type: "boolean" },
   { field: "featured_position", header: "Featured Position", type: "number" },
