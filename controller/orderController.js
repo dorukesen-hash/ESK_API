@@ -1052,4 +1052,5 @@ module.exports = {
     refundOrder,
     resendOrderConfirmation,
     exportOrdersExcel,
+    attachRefundTotals,
 }

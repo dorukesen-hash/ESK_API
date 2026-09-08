@@ -1,4 +1,5 @@
 const { Order, OrderItem, Customer, Shipment, OrderStatus, Billing, Carrier, ShipmentStatus, Invoice } = require('../db/models');
+const { attachRefundTotals } = require('./orderController');
 
 const getAccountOrders = async (userId) => {
     try {
@@ -21,6 +22,7 @@ const getAccountOrders = async (userId) => {
                         "title",
                         "code",
                         "variant",
+                        "variant_id",
                         "category",
                         "price",
                         "quantity",
@@ -75,7 +77,12 @@ const getAccountOrders = async (userId) => {
             ],
         });
 
-        return orders;
+        // Refund totals are never stored (see attachRefundTotals in
+        // orderController.js) - fetched live from Stripe per order so the
+        // account order history can show partial/full refunds, same as the
+        // admin single-order view already does. Cheap no-op for orders with
+        // no stripePaymentIntentId (manual orders, or none placed yet).
+        return await Promise.all(orders.map((order) => attachRefundTotals(order)));
     } catch (error) {
         console.error("Error fetching user orders:", error);
         throw error;
