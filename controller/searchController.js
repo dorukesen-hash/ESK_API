@@ -7,10 +7,12 @@ const searchBarFunc = async (data) => {
 
     const {
     searchValue,
+    limit,
+    page,
   } = data;
 
-  const limitx = 10;
-  const offset = 0;
+  const limitx = parseInt(limit ? limit : 10);
+  const offset = parseInt(page ? page : 0) * limitx;
 
   const order = [["createdAt", "ASC"]];
 
@@ -18,12 +20,12 @@ const searchBarFunc = async (data) => {
 
   if (searchValue?.length > 0) {
       const searchField = { title: { [Op.iLike]: `%${searchValue}%` } }
-  
+
       whereConditions.push(searchField);
     }
 
     const result = await Variant.findAndCountAll({
-    limitx,
+    limit: limitx,
     offset,
     order,
     where: createAndWhere(whereConditions),
