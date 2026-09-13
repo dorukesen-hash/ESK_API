@@ -9,6 +9,8 @@ const searchBarFunc = async (data) => {
     searchValue,
     limit,
     page,
+    categoryId,
+    subcategoryId,
   } = data;
 
   const limitx = parseInt(limit ? limit : 10);
@@ -23,6 +25,12 @@ const searchBarFunc = async (data) => {
 
       whereConditions.push(searchField);
     }
+
+  if (subcategoryId) {
+    whereConditions.push({ subcategoryId: parseInt(subcategoryId) });
+  } else if (categoryId) {
+    whereConditions.push({ categoryId: parseInt(categoryId) });
+  }
 
     const result = await Variant.findAndCountAll({
     limit: limitx,
