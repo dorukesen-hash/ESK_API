@@ -39,6 +39,7 @@ const DiscountCodeRedemption = require('./discountCodeRedemption')
 const PricingAuditLog = require('./pricingAuditLog')
 const OrderAuditLog = require('./orderAuditLog')
 const OrderItemRefund = require('./orderItemRefund')
+const InvoiceLineItems = require('./invoiceLineItems')
 
 
 User.hasMany(Category);
@@ -103,6 +104,10 @@ Shipment.belongsTo(ShipmentStatus);
 
 Invoice.hasMany(Order);
 Order.belongsTo(Invoice);
+
+// InvoiceLineItems associations
+Invoice.hasMany(InvoiceLineItems);
+InvoiceLineItems.belongsTo(Invoice);
 
 OrderStatus.hasMany(Order);
 Order.belongsTo(OrderStatus);
@@ -282,5 +287,6 @@ module.exports = {
 		DiscountCodeRedemption,
 		PricingAuditLog,
 		OrderAuditLog,
-		OrderItemRefund
+		OrderItemRefund,
+		InvoiceLineItems
 	};

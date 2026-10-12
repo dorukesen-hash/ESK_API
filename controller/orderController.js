@@ -1,5 +1,5 @@
 const models = require('../db/models')
-const { Order, OrderItem, Customer, Shipment, OrderStatus, User, Cart, Invoice, Transaction, Variant, VariantImages, Image, Carrier, DiscountCode, DiscountCodeRedemption, OrderItemRefund } = models
+const { Order, OrderItem, Customer, Shipment, OrderStatus, User, Cart, Invoice, Transaction, Variant, VariantImages, Image, Carrier, DiscountCode, DiscountCodeRedemption, OrderItemRefund, InvoiceLineItems } = models
 const { Op } = require('sequelize')
 const { createAndWhere } = require('./scopes');
 const Billing = require('../db/models/billing');
@@ -320,6 +320,10 @@ const getSingleOrder = async (id) => {
       },
       {
         model: Invoice,
+        include: [{
+          model: InvoiceLineItems,
+          as: 'lineItems',
+        }],
       }
     ]
    })
@@ -1122,6 +1126,34 @@ const createManualOrder = async (data, actorUserId) => {
     newOrder.invoiceId = invoice.id;
     await newOrder.save();
 
+    // Create invoice line items from order items
+    // Calculate items subtotal (without shipping)
+    const itemsSubtotal = orderItems.reduce((sum, item) => sum + Number(item.price), 0);
+
+    // Determine freight: free shipping over $1000 subtotal, otherwise use order's shippingCharges
+    const freightAmount = itemsSubtotal >= 1000 ? 0 : Number(newOrder.shippingCharges) || 0;
+
+    for (const item of orderItems) {
+      await InvoiceLineItems.create({
+        invoice_id: invoice.id,
+        product_name: item.title,
+        quantity: item.quantity,
+        unit_price: item.quantity > 0 ? Number(item.price) / item.quantity : 0,
+        total_price: item.price,
+        created_at: new Date(),
+      });
+    }
+
+    // Add freight/shipping as a separate invoice line item
+    await InvoiceLineItems.create({
+      invoice_id: invoice.id,
+      product_name: 'Freight',
+      quantity: 1,
+      unit_price: freightAmount,
+      total_price: freightAmount,
+      created_at: new Date(),
+    });
+
     // Mirrors createOrder's automatic confirmation email - a paid manual
     // order is a completed sale just as much as a card order, and the
     // customer should hear about it the same way.
@@ -1190,6 +1222,36 @@ const confirmOrderPayment = async (stripePaymentIntent) => {
   });
   order.invoiceId = invoice.id;
   await order.save();
+
+  // Create invoice line items from order items
+  const orderItems = await OrderItem.findAll({ where: { orderId: order.id } });
+  
+  // Calculate items subtotal (without shipping)
+  const itemsSubtotal = orderItems.reduce((sum, item) => sum + Number(item.price), 0);
+  
+  // Determine freight: free shipping over $1000 subtotal, otherwise use order's shippingCharges
+  const freightAmount = itemsSubtotal >= 1000 ? 0 : Number(order.shippingCharges) || 0;
+
+  for (const item of orderItems) {
+    await InvoiceLineItems.create({
+      invoice_id: invoice.id,
+      product_name: item.title,
+      quantity: item.quantity,
+      unit_price: item.quantity > 0 ? Number(item.price) / item.quantity : 0,
+      total_price: item.price,
+      created_at: new Date(),
+    });
+  }
+
+  // Add freight/shipping as a separate invoice line item
+  await InvoiceLineItems.create({
+    invoice_id: invoice.id,
+    product_name: 'Freight',
+    quantity: 1,
+    unit_price: freightAmount,
+    total_price: freightAmount,
+    created_at: new Date(),
+  });
 };
 
 module.exports = {
