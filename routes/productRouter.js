@@ -1,9 +1,12 @@
 const router = (module.exports = require('express').Router())
 const { getProducts, getProduct, saveProduct, deleteProduct, getProductsforSubCategory, getProductsFromSubCategoryName,
-    getProductDetails
+    getProductDetails,
+    reorderProductImages
 } = require('../controller/productController')
 const AppError = require('../utils/appError')
 const {User, Cart} = require("../db/models");
+const requireAuth = require('../middleware/requireAuth')
+const requireAdmin = require('../middleware/requireAdmin')
 
 // Description
 // GET /api/product
@@ -58,6 +61,24 @@ router.get('/details/:id', async (req, res, next) => {
 router.post('/', async (req, res, next) => {
     try {
         const data = await saveProduct(req.body)
+        res.status(200).send(data)
+    } catch (error) {
+        next(error)
+    }
+})
+
+// Reorder product images (Admin only)
+// POST /api/product/:id/images/reorder
+router.post('/:id/images/reorder', requireAuth, requireAdmin, async (req, res, next) => {
+    try {
+        const { id } = req.params
+        const { images } = req.body
+        
+        if (!images || !Array.isArray(images)) {
+            throw new AppError('Images array is required', 400)
+        }
+        
+        const data = await reorderProductImages(id, images)
         res.status(200).send(data)
     } catch (error) {
         next(error)
