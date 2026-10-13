@@ -3,6 +3,7 @@ const { Product, Subcategory, Category, ProductImages, Image, Spesification, Pri
 const Variant = require('../db/models/variant')
 const Description = require("../db/models/description");
 const Dimension = require('../db/models/dimensions');
+const AppError = require('../utils/appError')
 
 const getProducts = async () => {
 	return await Product.findAll()
@@ -40,7 +41,6 @@ const getProductDetails = async (productId) => {
 
   return data;
 };
-
 
 
 const getProductsforSubCategory = async (id) => {
@@ -98,7 +98,41 @@ const deleteProduct = async (id) => {
 	return await Product.destroy({where:{id : id}})
 }
 
+const reorderProductImages = async (productId, images) => {
+    // images: array of { imageId, position }
+    
+    // Check for duplicate positions
+    const positions = images.map(img => img.position)
+    const uniquePositions = new Set(positions)
+    if (positions.length !== uniquePositions.size) {
+        throw new AppError('Duplicate position values found. Each image must have a unique position.', 400)
+    }
 
+    // Verify all images belong to this product
+    const existingAssociations = await ProductImages.findAll({
+        where: {
+            productId: productId,
+            imageId: images.map(img => img.imageId)
+        }
+    })
+
+    if (existingAssociations.length !== images.length) {
+        throw new AppError('One or more images are not associated with this product', 400)
+    }
+
+    // Update positions in a transaction
+    const { sequelize } = require('../db/index.js')
+    await sequelize.transaction(async (t) => {
+        for (const img of images) {
+            await ProductImages.update(
+                { position: img.position },
+                { where: { productId: productId, imageId: img.imageId }, transaction: t }
+            )
+        }
+    })
+
+    return { success: true, message: 'Product images reordered successfully' }
+}
 
 module.exports = {
 	getProducts,
@@ -108,5 +142,6 @@ module.exports = {
 	deleteProduct,
 	getProductsforSubCategory,
 	getProductsFromSubCategoryName,
-	getProductDetails
+	getProductDetails,
+    reorderProductImages
 }

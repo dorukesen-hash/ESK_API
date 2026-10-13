@@ -110,7 +110,49 @@ Tüm endpoint'ler `/api` prefix'i altında çalışır.
 | GET | `/api/product/:id` | Alt kategori ID'sine göre ürünleri getirir |
 | GET | `/api/product/details/:id` | Ürün detayını getirir (FE için) |
 | POST | `/api/product/` | Ürün ekle |
+| **POST** | `/api/product/:id/images/reorder` | **Ürün görsellerini yeniden sırala (Admin)** |
 | DELETE | `/api/product/:id` | Ürün sil |
+
+---
+
+### Product Image Reorder Endpoint
+
+**POST** `/api/product/:id/images/reorder`
+
+> **Admin yetkisi gerektirir** (`requireAuth` + `requireAdmin`)
+
+**Path Parameters:**
+| Param | Tip | Açıklama |
+|-------|-----|----------|
+| `id` | integer | Ürün ID |
+
+**Request Body:**
+```json
+{
+  "images": [
+    { "imageId": 1, "position": 0 },
+    { "imageId": 2, "position": 1 },
+    { "imageId": 3, "position": 2 }
+  ]
+}
+```
+
+| Alan | Tip | Zorunlu | Açıklama |
+|------|-----|---------|----------|
+| `images` | array | Evet | Sıralanacak görseller listesi |
+| `images[].imageId` | integer | Evet | Görsel ID (Image tablosundaki ID) |
+| `images[].position` | integer | Evet | Yeni pozisyon (0'dan başlayarak, her görsel için benzersiz olmalı) |
+
+**Responses:**
+
+| Status | Açıklama |
+|--------|----------|
+| 200 | Başarılı: `{ "success": true, "message": "Product images reordered successfully" }` |
+| 400 | Hatalı istek: `images` array eksik veya geçersiz |
+| 400 | Tekrar eden position: `Duplicate position values found. Each image must have a unique position.` |
+| 400 | Geçersiz imageId: `One or more images are not associated with this product` |
+| 401 | Yetkisiz: Admin girişi gerekli |
+| 403 | Yasak: Admin yetkisi olmayan kullanıcı |
 
 ---
 
@@ -134,7 +176,49 @@ Tüm endpoint'ler `/api` prefix'i altında çalışır.
 | GET | `/api/subcategory/details/:id` | Alt kategori detayını getirir (FE için) |
 | GET | `/api/subcategory/name/` | Header'daki `query` ile kategori adına göre alt kategorileri getirir |
 | POST | `/api/subcategory/` | Alt kategori ekle |
+| **POST** | `/api/subcategory/:id/images/reorder` | **Alt kategori görsellerini yeniden sırala (Admin)** |
 | DELETE | `/api/subcategory/:id` | Alt kategori sil |
+
+---
+
+### Subcategory Image Reorder Endpoint
+
+**POST** `/api/subcategory/:id/images/reorder`
+
+> **Admin yetkisi gerektirir** (`requireAuth` + `requireAdmin`)
+
+**Path Parameters:**
+| Param | Tip | Açıklama |
+|-------|-----|----------|
+| `id` | integer | Alt kategori ID |
+
+**Request Body:**
+```json
+{
+  "images": [
+    { "imageId": 1, "position": 0 },
+    { "imageId": 2, "position": 1 },
+    { "imageId": 3, "position": 2 }
+  ]
+}
+```
+
+| Alan | Tip | Zorunlu | Açıklama |
+|------|-----|---------|----------|
+| `images` | array | Evet | Sıralanacak görseller listesi |
+| `images[].imageId` | integer | Evet | Görsel ID (Image tablosundaki ID) |
+| `images[].position` | integer | Evet | Yeni pozisyon (0'dan başlayarak, her görsel için benzersiz olmalı) |
+
+**Responses:**
+
+| Status | Açıklama |
+|--------|----------|
+| 200 | Başarılı: `{ "success": true, "message": "Subcategory images reordered successfully" }` |
+| 400 | Hatalı istek: `images` array eksik veya geçersiz |
+| 400 | Tekrar eden position: `Duplicate position values found. Each image must have a unique position.` |
+| 400 | Geçersiz imageId: `One or more images are not associated with this subcategory` |
+| 401 | Yetkisiz: Admin girişi gerekli |
+| 403 | Yasak: Admin yetkisi olmayan kullanıcı |
 
 ---
 
@@ -149,7 +233,49 @@ Tüm endpoint'ler `/api` prefix'i altında çalışır.
 | GET | `/api/variant/drop/:id` | Excel dropdown için varyant verisi |
 | POST | `/api/variant/` | Varyant ekle |
 | PUT | `/api/variant/` | Varyant güncelle |
+| **POST** | `/api/variant/:id/images/reorder` | **Varyant görsellerini yeniden sırala (Admin)** |
 | DELETE | `/api/variant/:id` | Varyant sil |
+
+---
+
+### Variant Image Reorder Endpoint
+
+**POST** `/api/variant/:id/images/reorder`
+
+> **Admin yetkisi gerektirir** (`requireAuth` + `requireAdmin`)
+
+**Path Parameters:**
+| Param | Tip | Açıklama |
+|-------|-----|----------|
+| `id` | integer | Varyant ID |
+
+**Request Body:**
+```json
+{
+  "images": [
+    { "imageId": 1, "position": 0 },
+    { "imageId": 2, "position": 1 },
+    { "imageId": 3, "position": 2 }
+  ]
+}
+```
+
+| Alan | Tip | Zorunlu | Açıklama |
+|------|-----|---------|----------|
+| `images` | array | Evet | Sıralanacak görseller listesi |
+| `images[].imageId` | integer | Evet | Görsel ID (Image tablosundaki ID) |
+| `images[].position` | integer | Evet | Yeni pozisyon (0'dan başlayarak, her görsel için benzersiz olmalı) |
+
+**Responses:**
+
+| Status | Açıklama |
+|--------|----------|
+| 200 | Başarılı: `{ "success": true, "message": "Variant images reordered successfully" }` |
+| 400 | Hatalı istek: `images` array eksik veya geçersiz |
+| 400 | Tekrar eden position: `Duplicate position values found. Each image must have a unique position.` |
+| 400 | Geçersiz imageId: `One or more images are not associated with this variant` |
+| 401 | Yetkisiz: Admin girişi gerekli |
+| 403 | Yasak: Admin yetkisi olmayan kullanıcı |
 
 ---
 
