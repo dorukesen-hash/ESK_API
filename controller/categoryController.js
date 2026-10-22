@@ -1,55 +1,19 @@
 const { Op } = require('sequelize')
 const {Category, Subcategory, Product, SubcategoryImages, Image, ProductImages } = require('../db/models')
 const Variant = require('../db/models/variant')
+const { getTree } = require('./catalogNodeController')
+const { toLegacyCategoryShape } = require('./catalogNodeTree')
 
+// Compatibility shim: ESK_FE_V2 calls GET /category directly and still
+// expects this exact legacy shape. The real data now lives in catalog_node
+// (see docs/superpowers/specs/2026-10-22-unlimited-catalog-hierarchy-design.md);
+// this reshapes it back. Only works for trees up to 3 levels deep - a node
+// nested deeper than Category -> Subcategory -> Product has no slot here
+// and is simply omitted (toLegacyCategoryShape's own documented behavior).
 const getCategories = async () => {
-  return await Category.findAll({
-    attributes: ["id", "name"],
-    include: [
-      {
-        model: Subcategory,
-        include: [
-          {
-            model: SubcategoryImages,
-            include: [{ model: Image }],
-          },
-          {
-            model: Product,
-            include: [
-              {
-                model: Variant,
-                as: "variants",
-                where: {},
-                required: false,
-              },
-              {
-                model: ProductImages,
-                include: [ {model: Image}]
-               }
-            ],
-          },
-          {
-            model: Variant,
-            as: "variants",
-            where: {
-              productId: null,
-            },
-            required: false,
-          },
-        ],
-      },
-      {
-        model: Variant,
-        as: "variants",
-        where: {
-          subcategory_id: null,
-          product_id: null,
-        },
-        required: false,
-      },
-    ],
-  });
-};
+  const tree = await getTree()
+  return toLegacyCategoryShape(tree)
+}
 
 
 
