@@ -158,6 +158,7 @@ const uploadVariantExcel = async (hierarchyType, hierarchyId, fileBuffer, userId
   let catId;
   let subcatId;
   let prodId;
+  let nodeId;
 
   // Hiyerarşi ayarı
   if (hierarchyType === "category") {
@@ -173,6 +174,11 @@ const uploadVariantExcel = async (hierarchyType, hierarchyId, fileBuffer, userId
     let prod = await Product.findOne({ where: { id: parseInt(hierarchyId) } });
     catId = prod.categoryId;
     subcatId = prod.subcategoryId;
+  } else if (hierarchyType === "node") {
+    // catalog_node - a single direct FK, no ancestor ids to resolve (unlike
+    // category/subcategory/product above, which denormalize the whole
+    // legacy ancestor chain onto every variant).
+    nodeId = hierarchyId;
   }
 
   // Zorunlu alan kontrolü
@@ -354,6 +360,8 @@ const uploadVariantExcel = async (hierarchyType, hierarchyId, fileBuffer, userId
         variantData.categoryId = catId;
         variantData.subcategoryId = subcatId;
         variantData.productId = prodId;
+      } else if (hierarchyType === "node") {
+        variantData.nodeId = parseInt(nodeId);
       }
 
       const created = await Variant.create(variantData);
