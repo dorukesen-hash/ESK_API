@@ -9,6 +9,7 @@ const authRouter = require('./authRouter');
 const carrierPriceRouter = require('./carrierPriceRouter');
 const carrierRouter = require('./carrierRouter');
 const categoryRouter = require('./categoryRouter');
+const catalogNodeRouter = require('./catalogNodeRouter');
 const cookieRouter = require('./cookieRouter');
 const customerRouter = require('./customerRouter');
 const deciRouter = require('./deciRouter');
@@ -49,6 +50,7 @@ api.use('/carriers',  carrierRouter)
 api.use('/cart', cartRouter)
 api.use('/carrierprice',  carrierPriceRouter)
 api.use('/category',  categoryRouter)
+api.use('/catalog-node', catalogNodeRouter)
 api.use('/customer',  customerRouter)
 api.use('/cookie', cookieRouter)
 // D

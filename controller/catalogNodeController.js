@@ -1,6 +1,10 @@
 const { Op } = require('sequelize')
 const { CatalogNode, CatalogNodeImages, Variant } = require('../db/models')
-const { sequelize } = require('../db/index.js')
+// db/index.js's module.exports IS the Sequelize instance itself (not
+// { sequelize }) - destructuring `sequelize` off it gives undefined. The
+// existing reorderProductImages/reorderSubCategoryImages/reorderVariantImages
+// functions make this same mistake (unexercised so far); don't repeat it here.
+const sequelize = require('../db/index.js')
 const AppError = require('../utils/appError')
 const { buildTree, ancestorChain, collectDescendantIds, attachVariantsToTree } = require('./catalogNodeTree')
 
