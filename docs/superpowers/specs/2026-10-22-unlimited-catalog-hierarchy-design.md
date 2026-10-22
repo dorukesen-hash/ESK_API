@@ -69,8 +69,7 @@ New table `catalog_node`:
 
 Not carried forward: `Subcategory.sellProduct` — grepped across the
 codebase and it is read nowhere outside its own model definition.
-Flagging for confirmation during spec review rather than silently
-dropping it.
+Confirmed dropped; no equivalent column on `CatalogNode`.
 
 New table `catalog_node_images` (replaces `SubcategoryImages` and
 `ProductImages`):
@@ -136,10 +135,19 @@ sharing the same `nodeId` as the current variant. This is strictly
 simpler than today's code, not just equivalent: there is no longer a
 "which of three columns is populated" branch to maintain.
 
-New routes mount under `/catalog-node` (or `/category`, kept as the
-external path for backward compatibility while the URL path name is
-decided — flagged as an open question below). `/subcategory` and
-`/product` routes are retired once ESK_ADMIN no longer calls them.
+New routes mount under `/catalog-node`. `/subcategory` and `/product`
+are retired once ESK_ADMIN no longer calls them.
+
+`/category` is **not** retired — ESK_FE_V2 still calls it directly
+(`hooks/useCategories.js`) and is explicitly out of scope for this
+round. It becomes a compatibility shim: reshape the `catalog_node`
+tree back into the legacy `{ category: { subcategories: [{
+products: [{ variants }], variants }], variants } }` JSON. This only
+works cleanly for trees up to three levels deep — a node nested
+deeper than Category → Subcategory → Product has no slot in that
+legacy shape and simply won't appear in it. That's an accepted,
+temporary limitation: deeper nesting is an API/Admin-only capability
+until ESK_FE_V2 is migrated in a follow-up round.
 
 ## Admin UI (ESK_ADMIN)
 
@@ -204,11 +212,10 @@ decided — flagged as an open question below). `/subcategory` and
   impossible to exercise, since depth was capped at Category →
   Subcategory → Product).
 
-## Open questions for spec review
+## Decisions (resolved during spec review)
 
-- Keep the public API path as `/category` (least churn for any
-  external caller) or rename to `/catalog-node` (more honest once the
-  table is generic)?
-- `Subcategory.sellProduct` — confirmed unused; drop it, or does it
-  encode an intent that should carry forward as something else on
-  `CatalogNode`?
+- New public API path is `/catalog-node` (not `/category`) — more
+  honest once the table is generic. `/category` is kept only as the
+  ESK_FE_V2 compatibility shim described above, not as the primary
+  path for new consumers (ESK_ADMIN moves to `/catalog-node`).
+- `Subcategory.sellProduct` is dropped. Confirmed unused.
