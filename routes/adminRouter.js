@@ -1,7 +1,7 @@
 const router = (module.exports = require('express').Router())
 const { getCategoriesforAdmin, getVariantsForAdmin, updateCategoryAdmin, addCategoryAdmin, deleteCategoryAdmin, getSubCategoriesforAdmin, addSubCategoryAdmin, updateSubCategoryAdmin, deleteSubCategoryAdmin, getProductsforAdmin, addProductAdmin, updateProductAdmin, deleteProductAdmin, updateVariantForAdmin, deleteVariantForAdmin, getFeaturedVariantsForAdmin } = require('../controller/adminController')
 const {
-	getTree: getCatalogNodeTree,
+	getFullTree: getCatalogNodeTree,
 	getNode: getCatalogNode,
 	createNode: createCatalogNode,
 	updateNode: updateCatalogNode,
