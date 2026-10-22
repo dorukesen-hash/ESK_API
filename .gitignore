@@ -128,3 +128,6 @@ dist
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+
+# Local git worktrees (superpowers:using-git-worktrees)
+.worktrees/
