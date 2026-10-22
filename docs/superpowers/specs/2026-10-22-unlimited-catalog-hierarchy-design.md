@@ -199,6 +199,29 @@ until ESK_FE_V2 is migrated in a follow-up round.
    `Variant.subcategoryId` / `Variant.productId` in a separate,
    explicitly-approved migration.
 
+### Deployment order, per environment
+
+Deploying this code with no further action is safe but incomplete:
+`GET /category` keeps serving the pre-migration query (via its
+built-in fallback) until the steps below run, and the new
+`/catalog-node` / `/admin/catalog-node` endpoints 500 until step 1
+runs (they need `variant.node_id`, which `sync()` never creates on its
+own for a pre-existing table). Run, in this order, against each
+environment this branch reaches:
+
+1. `node scripts/addVariantNodeIdColumn.js` — idempotent; adds
+   `variant.node_id` if it isn't already there.
+2. `node scripts/backfillCatalogNode.js` — dry run, no writes. Confirm
+   the reported counts match expectations and note any orphan
+   warnings.
+3. `node scripts/backfillCatalogNode.js --apply` — writes. Requires a
+   separate, explicit go-ahead each time (not something to run as part
+   of a routine deploy) — this is the one step that mutates real
+   catalog data.
+4. Spot-check `GET /category` returns the same shape and content as
+   before (subcategory/product images present, variant prices and
+   descriptions present).
+
 ## Testing
 
 - Backfill script: automated row-count parity check (old 3-table
