@@ -131,3 +131,6 @@ dist
 
 # Local git worktrees (superpowers:using-git-worktrees)
 .worktrees/
+
+# superpowers plan-execution scratch (ledger, briefs, review packages)
+.superpowers/
