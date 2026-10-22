@@ -5,8 +5,10 @@ const {
   ancestorChain,
   collectDescendantIds,
   attachVariantsToTree,
+  attachImagesToTree,
   resolveLegacyNodeKey,
   toLegacyCategoryShape,
+  toNodeId,
 } = require('./catalogNodeTree')
 
 test('buildTree: empty input returns no roots', () => {
@@ -193,4 +195,95 @@ test('toLegacyCategoryShape: a 4th level of nesting is omitted, not crashed on o
   // The variant attached at the 4th level has no slot in the legacy shape -
   // it is simply absent, not attributed to the wrong product.
   assert.deepEqual(product.variants, [])
+})
+
+test('buildTree: a two-node cycle promotes both nodes to roots, neither vanishes', () => {
+  const nodes = [
+    { id: 1, parentId: 2 },
+    { id: 2, parentId: 1 },
+    { id: 3, parentId: null },
+  ]
+  const tree = buildTree(nodes)
+  assert.deepEqual(tree.map((n) => n.id).sort(), [1, 2, 3])
+  // Neither cyclic node is nested inside the other.
+  const one = tree.find((n) => n.id === 1)
+  const two = tree.find((n) => n.id === 2)
+  assert.deepEqual(one.children, [])
+  assert.deepEqual(two.children, [])
+})
+
+test('buildTree: a three-node cycle promotes every member to root', () => {
+  const nodes = [
+    { id: 1, parentId: 2 },
+    { id: 2, parentId: 3 },
+    { id: 3, parentId: 1 },
+  ]
+  const tree = buildTree(nodes)
+  assert.deepEqual(tree.map((n) => n.id).sort(), [1, 2, 3])
+})
+
+test('toNodeId: numeric string coerces to a number', () => {
+  assert.equal(toNodeId('2'), 2)
+})
+
+test('toNodeId: a real number passes through', () => {
+  assert.equal(toNodeId(2), 2)
+})
+
+test('toNodeId: a non-numeric string is invalid', () => {
+  assert.equal(toNodeId('abc'), null)
+})
+
+test('toNodeId: null/undefined are invalid', () => {
+  assert.equal(toNodeId(null), null)
+  assert.equal(toNodeId(undefined), null)
+})
+
+test('attachImagesToTree: attaches images at every depth, ordered by position', () => {
+  const tree = buildTree([
+    { id: 1, parentId: null },
+    { id: 2, parentId: 1 },
+  ])
+  const images = [
+    { nodeId: 2, position: 1, image: { url: 'b.jpg' } },
+    { nodeId: 2, position: 0, image: { url: 'a.jpg' } },
+    { nodeId: 1, position: 0, image: { url: 'root.jpg' } },
+  ]
+  const result = attachImagesToTree(tree, images)
+  assert.deepEqual(result[0].images.map((i) => i.image.url), ['root.jpg'])
+  assert.deepEqual(result[0].children[0].images.map((i) => i.image.url), ['a.jpg', 'b.jpg'])
+})
+
+test('attachImagesToTree: a node with no images gets an empty array, not undefined', () => {
+  const tree = buildTree([{ id: 1, parentId: null }])
+  const result = attachImagesToTree(tree, [])
+  assert.deepEqual(result[0].images, [])
+})
+
+test('toLegacyCategoryShape: emits subcategory_images and product_images from attached images', () => {
+  let tree = buildTree([
+    { id: 1, name: 'Category', parentId: null },
+    { id: 2, name: 'Subcategory', parentId: 1 },
+    { id: 3, name: 'Product', parentId: 2 },
+  ])
+  tree = attachVariantsToTree(tree, [])
+  tree = attachImagesToTree(tree, [
+    { nodeId: 2, position: 0, image: { url: 'sub.jpg' } },
+    { nodeId: 3, position: 0, image: { url: 'prod.jpg' } },
+  ])
+  const shape = toLegacyCategoryShape(tree)
+  const subcategory = shape[0].subcategories[0]
+  assert.deepEqual(subcategory.subcategory_images.map((i) => i.image.url), ['sub.jpg'])
+  assert.deepEqual(subcategory.products[0].product_images.map((i) => i.image.url), ['prod.jpg'])
+})
+
+test('toLegacyCategoryShape: a node with no images emits an empty image array, not a missing key', () => {
+  let tree = buildTree([
+    { id: 1, name: 'Category', parentId: null },
+    { id: 2, name: 'Subcategory', parentId: 1 },
+  ])
+  tree = attachVariantsToTree(tree, [])
+  tree = attachImagesToTree(tree, [])
+  const shape = toLegacyCategoryShape(tree)
+  assert.deepEqual(shape[0].subcategories[0].subcategory_images, [])
 })

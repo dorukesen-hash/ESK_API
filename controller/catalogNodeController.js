@@ -1,13 +1,23 @@
 const { Op } = require('sequelize')
-const { CatalogNode, CatalogNodeImages, Variant } = require('../db/models')
+const { CatalogNode, CatalogNodeImages, Variant, Image } = require('../db/models')
 // db/index.js's module.exports IS the Sequelize instance itself (not
 // { sequelize }) - destructuring `sequelize` off it gives undefined. The
 // existing reorderProductImages/reorderSubCategoryImages/reorderVariantImages
 // functions make this same mistake (unexercised so far); don't repeat it here.
 const sequelize = require('../db/index.js')
 const AppError = require('../utils/appError')
-const { buildTree, ancestorChain, collectDescendantIds, attachVariantsToTree } = require('./catalogNodeTree')
+const {
+  buildTree,
+  ancestorChain,
+  collectDescendantIds,
+  attachVariantsToTree,
+  attachImagesToTree,
+  toNodeId,
+} = require('./catalogNodeTree')
 
+// Lightweight tree - variant fields trimmed to what a tree/nav view needs.
+// Do not use this for anything that renders a variant (price, description,
+// images) to an end user - see getFullTree.
 const getTree = async () => {
   const nodes = await CatalogNode.findAll({ raw: true })
   const variants = await Variant.findAll({
@@ -15,6 +25,21 @@ const getTree = async () => {
     attributes: ['id', 'title', 'sku', 'nodeId'],
   })
   return attachVariantsToTree(buildTree(nodes), variants)
+}
+
+// Full tree - every variant column, plus each node's images - this is what
+// the legacy /category shim (categoryController.js) needs to reproduce the
+// exact payload ESK_FE/ESK_FE_V2 already render against; getTree's trimmed
+// variant shape silently drops price, description, and featured fields.
+const getFullTree = async () => {
+  const nodes = await CatalogNode.findAll({ raw: true })
+  const variants = await Variant.findAll({ raw: true })
+  const imageRows = await CatalogNodeImages.findAll({
+    include: [{ model: Image }],
+    order: [['position', 'ASC']],
+  })
+  const images = imageRows.map((row) => row.get({ plain: true }))
+  return attachImagesToTree(attachVariantsToTree(buildTree(nodes), variants), images)
 }
 
 const getNode = async (id) => {
@@ -60,9 +85,17 @@ const updateNode = async (id, data) => {
   const fields = pickNodeFields(data)
 
   if (fields.parentId !== undefined && fields.parentId !== null) {
+    // fields.parentId may be a string here (e.g. a form-encoded request
+    // body) - compare it against collectDescendantIds' numeric ids with
+    // strict equality and a cycle slips straight past the guard. Normalize
+    // first, and reject anything that isn't a real id outright.
+    const parentId = toNodeId(fields.parentId)
+    if (parentId === null) throw new AppError('parentId must be a number', 400)
+    fields.parentId = parentId
+
     const nodes = await CatalogNode.findAll({ raw: true })
     const descendantIds = collectDescendantIds(nodes, nodeId)
-    if (descendantIds.includes(fields.parentId)) {
+    if (descendantIds.includes(parentId)) {
       throw new AppError('A node cannot be moved under itself or one of its own descendants', 400)
     }
   }
@@ -125,6 +158,7 @@ const reorderNodeImages = async (nodeId, images) => {
 
 module.exports = {
   getTree,
+  getFullTree,
   getNode,
   createNode,
   updateNode,
