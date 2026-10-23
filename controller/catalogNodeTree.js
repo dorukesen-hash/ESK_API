@@ -155,6 +155,23 @@ function toLegacyCategoryShape(tree) {
   }))
 }
 
+// Normalizes a node name to Title Case: the first letter of each word
+// capitalized, the rest lowercased, with whitespace/-/ /" left exactly where
+// they were (so they act as word separators without being removed). Turkish-
+// locale-aware ('tr') on purpose - a locale-insensitive toUpperCase/
+// toLowerCase gets "i"/"I" wrong for Turkish text (e.g. capitalizing
+// "istanbul" must produce the dotted "İstanbul", not the ASCII "Istanbul").
+// Each word is lowercased in full BEFORE capitalizing its first letter
+// (rather than upper-casing the already-cased first letter in place) so
+// mixed/garbled input ("AMBALAJ", "aMBALAJ") normalizes the same way a
+// properly-typed word would.
+function toTitleCase(str) {
+  return str.replace(/[^\s\-/"]+/g, (word) => {
+    const lower = word.toLocaleLowerCase('tr')
+    return lower.charAt(0).toLocaleUpperCase('tr') + lower.slice(1)
+  })
+}
+
 module.exports = {
   buildTree,
   ancestorChain,
@@ -164,4 +181,5 @@ module.exports = {
   resolveLegacyNodeKey,
   toLegacyCategoryShape,
   toNodeId,
+  toTitleCase,
 }

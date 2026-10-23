@@ -9,6 +9,7 @@ const {
   resolveLegacyNodeKey,
   toLegacyCategoryShape,
   toNodeId,
+  toTitleCase,
 } = require('./catalogNodeTree')
 
 test('buildTree: empty input returns no roots', () => {
@@ -286,4 +287,37 @@ test('toLegacyCategoryShape: a node with no images emits an empty image array, n
   tree = attachImagesToTree(tree, [])
   const shape = toLegacyCategoryShape(tree)
   assert.deepEqual(shape[0].subcategories[0].subcategory_images, [])
+})
+
+test('toTitleCase: lowercase words become capitalized, rest lowercased', () => {
+  assert.equal(toTitleCase('ambalaj malzemeleri'), 'Ambalaj Malzemeleri')
+})
+
+test('toTitleCase: all-caps input is normalized the same way', () => {
+  // No "I" in this example deliberately - Turkish lowercasing of a plain
+  // ASCII "I" is genuinely ambiguous (it could have been typed for dotted
+  // "i" or dotless "ı"; ASCII capitals can't tell them apart, and Turkish
+  // locale rules correctly resolve plain "I" to dotless "ı", which is why
+  // "MALZEMELERI" normalizes to "Malzemelerı", not back to "Malzemeleri" -
+  // not a bug, an inherent property of the input). See the dedicated
+  // dotted/dotless test below for the unambiguous (lowercase-input) case.
+  assert.equal(toTitleCase('AMBALAJ KUTUSU'), 'Ambalaj Kutusu')
+})
+
+test('toTitleCase: hyphens and slashes are preserved as separators, not removed', () => {
+  assert.equal(toTitleCase('ambalaj-malzemeleri/kutu'), 'Ambalaj-Malzemeleri/Kutu')
+})
+
+test('toTitleCase: double quotes are preserved in place', () => {
+  assert.equal(toTitleCase('cord strap "heavy duty"'), 'Cord Strap "Heavy Duty"')
+})
+
+test('toTitleCase: Turkish dotted/dotless i is capitalized correctly, not with the ASCII rule', () => {
+  // "istanbul" capitalizes to "İstanbul" (dotted İ) in Turkish, not the
+  // ASCII "Istanbul" a locale-insensitive toUpperCase() would produce.
+  assert.equal(toTitleCase('istanbul'), 'İstanbul')
+})
+
+test('toTitleCase: a single already-capitalized word is left alone', () => {
+  assert.equal(toTitleCase('Kutu'), 'Kutu')
 })

@@ -13,6 +13,7 @@ const {
   attachVariantsToTree,
   attachImagesToTree,
   toNodeId,
+  toTitleCase,
 } = require('./catalogNodeTree')
 
 // Lightweight tree - variant fields trimmed to what a tree/nav view needs.
@@ -74,15 +75,33 @@ function pickNodeFields(data) {
   return fields
 }
 
+// Node names are normalized to Title Case and must be unique across the
+// whole catalog, not just among siblings (every node's name is a flat
+// namespace, independent of depth or parent) - throws 409 if the
+// normalized name is already taken by a different node.
+async function ensureUniqueName(name, excludeNodeId) {
+  const normalized = toTitleCase(name)
+  const where = { name: normalized }
+  if (excludeNodeId != null) where.id = { [Op.ne]: excludeNodeId }
+  const existing = await CatalogNode.findOne({ where })
+  if (existing) throw new AppError(`"${normalized}" name is already in use`, 409)
+  return normalized
+}
+
 const createNode = async (data) => {
   const fields = pickNodeFields(data)
   if (!fields.name) throw new AppError('name is required', 400)
+  fields.name = await ensureUniqueName(fields.name, null)
   return await CatalogNode.create(fields)
 }
 
 const updateNode = async (id, data) => {
   const nodeId = parseInt(id)
   const fields = pickNodeFields(data)
+
+  if (fields.name !== undefined) {
+    fields.name = await ensureUniqueName(fields.name, nodeId)
+  }
 
   if (fields.parentId !== undefined && fields.parentId !== null) {
     // fields.parentId may be a string here (e.g. a form-encoded request
