@@ -1,7 +1,9 @@
 const router = (module.exports = require('express').Router())
 const AppError = require('../utils/appError')
-const { getSubCategories, addSubCategory, deleteSubCategory, getSubCategoriesPerCategory, getSubCategoriesByCategoryName, getSubcategoryDetails } = require('../controller/subCategoryController')
+const { getSubCategories, addSubCategory, deleteSubCategory, getSubCategoriesPerCategory, getSubCategoriesByCategoryName, getSubcategoryDetails, reorderSubCategoryImages } = require('../controller/subCategoryController')
 const { CloudHSM } = require('aws-sdk')
+const requireAuth = require('../middleware/requireAuth')
+const requireAdmin = require('../middleware/requireAdmin')
 
 // Description
 // GET /api/subcategory
@@ -51,12 +53,29 @@ router.get('/name/', async (req, res, next) => {
 
 
 
-
 // Save subcategory
 // POST /api/subcategory/
 router.post('/', async (req, res, next) => {
     try {
         const data = await addSubCategory(req.body)
+        res.status(200).send(data)
+    } catch (error) {
+        next(error)
+    }
+})
+
+// Reorder subcategory images (Admin only)
+// POST /api/subcategory/:id/images/reorder
+router.post('/:id/images/reorder', requireAuth, requireAdmin, async (req, res, next) => {
+    try {
+        const { id } = req.params
+        const { images } = req.body
+        
+        if (!images || !Array.isArray(images)) {
+            throw new AppError('Images array is required', 400)
+        }
+        
+        const data = await reorderSubCategoryImages(id, images)
         res.status(200).send(data)
     } catch (error) {
         next(error)

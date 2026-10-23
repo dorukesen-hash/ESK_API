@@ -121,6 +121,42 @@ const deleteSubCategory = async (id) => {
 	return await Subcategory.destroy({ where: {id}})
 }
 
+const reorderSubCategoryImages = async (subcategoryId, images) => {
+    // images: array of { imageId, position }
+    
+    // Check for duplicate positions
+    const positions = images.map(img => img.position)
+    const uniquePositions = new Set(positions)
+    if (positions.length !== uniquePositions.size) {
+        throw new AppError('Duplicate position values found. Each image must have a unique position.', 400)
+    }
+
+    // Verify all images belong to this subcategory
+    const existingAssociations = await SubcategoryImages.findAll({
+        where: {
+            subcategoryId: subcategoryId,
+            imageId: images.map(img => img.imageId)
+        }
+    })
+
+    if (existingAssociations.length !== images.length) {
+        throw new AppError('One or more images are not associated with this subcategory', 400)
+    }
+
+    // Update positions in a transaction
+    const { sequelize } = require('../db/index.js')
+    await sequelize.transaction(async (t) => {
+        for (const img of images) {
+            await SubcategoryImages.update(
+                { position: img.position },
+                { where: { subcategoryId: subcategoryId, imageId: img.imageId }, transaction: t }
+            )
+        }
+    })
+
+    return { success: true, message: 'Subcategory images reordered successfully' }
+}
+
 module.exports = {
 	getSubCategories,
 	getSubCategoryByName,
@@ -131,5 +167,6 @@ module.exports = {
 	getSubCategoriesByCategoryName,
 	saveSubCategory,
 	editSubCategory,
-    getSubcategoryDetails
+    getSubcategoryDetails,
+    reorderSubCategoryImages
 }

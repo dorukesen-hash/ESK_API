@@ -1,5 +1,5 @@
 const { Op } = require("sequelize");
-const { Image, SubcategoryImages, ProductImages, VariantImages } = require("../db/models");
+const { Image, SubcategoryImages, ProductImages, VariantImages, CatalogNodeImages } = require("../db/models");
 const { createAndWhere } = require("./scopes");
 
 const getImages = async (searchItem) => {
@@ -45,6 +45,8 @@ const deleteImageConnections = async (type, id) => {
       await ProductImages.destroy({ where: { productId: id } });
     } else if (type === "variant") {
       await VariantImages.destroy({ where: { variantId: id } });
+    } else if (type === "node") {
+      await CatalogNodeImages.destroy({ where: { nodeId: id } });
     }
   } catch (error) {
     console.log(error);

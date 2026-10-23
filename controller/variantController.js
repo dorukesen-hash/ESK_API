@@ -12,7 +12,6 @@ const Variant = require("../db/models/variant");
 const { ProductImages, Image, VariantImages } = require("../db/models");
 const XLSX = require("xlsx");
 const AppError = require("../utils/appError");
-const { sequelize } = require("sequelize");
 const Description = require("../db/models/description");
 const Dimension = require("../db/models/dimensions");
 const { logVariantCreate } = require("./variantAuditController");
@@ -159,6 +158,7 @@ const uploadVariantExcel = async (hierarchyType, hierarchyId, fileBuffer, userId
   let catId;
   let subcatId;
   let prodId;
+  let nodeId;
 
   // Hiyerarşi ayarı
   if (hierarchyType === "category") {
@@ -174,7 +174,11 @@ const uploadVariantExcel = async (hierarchyType, hierarchyId, fileBuffer, userId
     let prod = await Product.findOne({ where: { id: parseInt(hierarchyId) } });
     catId = prod.categoryId;
     subcatId = prod.subcategoryId;
-
+  } else if (hierarchyType === "node") {
+    // catalog_node - a single direct FK, no ancestor ids to resolve (unlike
+    // category/subcategory/product above, which denormalize the whole
+    // legacy ancestor chain onto every variant).
+    nodeId = hierarchyId;
   }
 
   // Zorunlu alan kontrolü
@@ -356,6 +360,8 @@ const uploadVariantExcel = async (hierarchyType, hierarchyId, fileBuffer, userId
         variantData.categoryId = catId;
         variantData.subcategoryId = subcatId;
         variantData.productId = prodId;
+      } else if (hierarchyType === "node") {
+        variantData.nodeId = parseInt(nodeId);
       }
 
       const created = await Variant.create(variantData);
@@ -382,6 +388,42 @@ const dataForExcelDropdown = async (data) => {
   return result;
 };
 
+const reorderVariantImages = async (variantId, images) => {
+    // images: array of { imageId, position }
+    
+    // Check for duplicate positions
+    const positions = images.map(img => img.position)
+    const uniquePositions = new Set(positions)
+    if (positions.length !== uniquePositions.size) {
+        throw new AppError('Duplicate position values found. Each image must have a unique position.', 400)
+    }
+
+    // Verify all images belong to this variant
+    const existingAssociations = await VariantImages.findAll({
+        where: {
+            variantId: variantId,
+            imageId: images.map(img => img.imageId)
+        }
+    })
+
+    if (existingAssociations.length !== images.length) {
+        throw new AppError('One or more images are not associated with this variant', 400)
+    }
+
+    // Update positions in a transaction
+    const { sequelize } = require('../db/index.js')
+    await sequelize.transaction(async (t) => {
+        for (const img of images) {
+            await VariantImages.update(
+                { position: img.position },
+                { where: { variantId: variantId, imageId: img.imageId }, transaction: t }
+            )
+        }
+    })
+
+    return { success: true, message: 'Variant images reordered successfully' }
+}
+
 module.exports = {
   getVariants,
   getVariant,
@@ -392,4 +434,5 @@ module.exports = {
   uploadVariantExcel,
   dataForExcelDropdown,
   getVariantByIdList,
+  reorderVariantImages
 };

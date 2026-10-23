@@ -39,6 +39,9 @@ const DiscountCodeRedemption = require('./discountCodeRedemption')
 const PricingAuditLog = require('./pricingAuditLog')
 const OrderAuditLog = require('./orderAuditLog')
 const OrderItemRefund = require('./orderItemRefund')
+const InvoiceLineItems = require('./invoiceLineItems')
+const CatalogNode = require('./catalogNode')
+const CatalogNodeImages = require('./catalogNodeImages')
 
 
 User.hasMany(Category);
@@ -104,6 +107,10 @@ Shipment.belongsTo(ShipmentStatus);
 Invoice.hasMany(Order);
 Order.belongsTo(Invoice);
 
+// InvoiceLineItems associations
+Invoice.hasMany(InvoiceLineItems);
+InvoiceLineItems.belongsTo(Invoice);
+
 OrderStatus.hasMany(Order);
 Order.belongsTo(OrderStatus);
 
@@ -150,6 +157,32 @@ SpesificationImages.belongsTo(Spesification);
 Image.hasMany(SpesificationImages);
 SpesificationImages.belongsTo(Image);
 
+
+// CatalogNode - self-referencing tree, replaces the fixed-depth
+// Category/Subcategory/Product chain above. See
+// docs/superpowers/specs/2026-10-22-unlimited-catalog-hierarchy-design.md.
+CatalogNode.belongsTo(CatalogNode, { as: 'parent', foreignKey: 'parentId' })
+CatalogNode.hasMany(CatalogNode, { as: 'children', foreignKey: 'parentId' })
+
+CatalogNode.hasMany(Variant, { as: 'variants', foreignKey: 'nodeId' })
+Variant.belongsTo(CatalogNode, { as: 'catalogNode', foreignKey: 'nodeId' })
+
+CatalogNode.hasMany(CatalogNodeImages, { as: 'images', foreignKey: 'nodeId' })
+CatalogNodeImages.belongsTo(CatalogNode, { as: 'catalogNode', foreignKey: 'nodeId' })
+
+// constraints: false - same pre-existing condition as the description_id
+// note below: the live "image" table's id column has no PK/unique
+// constraint either, so a real FK to it fails CatalogNodeImages' CREATE
+// TABLE at sync time the same way.
+Image.hasMany(CatalogNodeImages, { foreignKey: 'imageId', constraints: false })
+CatalogNodeImages.belongsTo(Image, { foreignKey: 'imageId', constraints: false })
+
+// constraints: false - the live "description" table's id column has no
+// PK/unique constraint at the DB level (the same pre-existing condition
+// documented on Order<->DiscountCodeRedemption and Order<->OrderAuditLog
+// below), so a real FK to it fails CatalogNode's CREATE TABLE at sync time.
+Description.hasMany(CatalogNode, { foreignKey: 'description_id', constraints: false })
+CatalogNode.belongsTo(Description, { as: 'desc', foreignKey: 'description_id', constraints: false })
 
 Description.hasMany(Product, {foreignKey: 'description_id'})
 Product.belongsTo(Description, {as: "desc1" , foreignKey: 'description_id'})
@@ -282,5 +315,8 @@ module.exports = {
 		DiscountCodeRedemption,
 		PricingAuditLog,
 		OrderAuditLog,
-		OrderItemRefund
+		OrderItemRefund,
+		InvoiceLineItems,
+		CatalogNode,
+		CatalogNodeImages
 	};
