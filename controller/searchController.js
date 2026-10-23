@@ -1,8 +1,22 @@
 const AppError = require('../utils/appError')
-const  { Variant, Subcategory, Category}  = require('../db/models');
-const { QueryTypes } = require('sequelize');
+const  { Variant, Subcategory, Category, CatalogNode}  = require('../db/models');
+const { QueryTypes, Op } = require('sequelize');
 const { createAndWhere } = require('./scopes');
+const { collectDescendantIds } = require('./catalogNodeTree');
 const db = require('../db/index.js');
+
+// `categoryId`/`subcategoryId` here are catalog_node ids (the FE sources
+// them from the catalog_node-backed /category and /catalog-node endpoints -
+// see docs/superpowers/specs/2026-10-22-unlimited-catalog-hierarchy-design.md),
+// not the legacy category/subcategory table ids. catalog_node is a fresh
+// table with its own id sequence, so the two never coincide - filtering on
+// v.category_id/v.subcategory_id directly (the legacy FK columns) silently
+// matched nothing. Resolve the given id's full descendant subtree instead
+// and filter on the variant's catalog_node-based `nodeId` column.
+async function descendantNodeIds(nodeId) {
+  const nodes = await CatalogNode.findAll({ raw: true, attributes: ['id', 'parentId'] })
+  return collectDescendantIds(nodes, parseInt(nodeId))
+}
 
 // Full-text search fields grouped by relevance weight (Postgres tsvector
 // weight labels, highest to lowest). A title/SKU match should always
@@ -74,12 +88,17 @@ async function fullTextSearch({ searchValue, limitx, offset, categoryId, subcate
   const replacements = { query: tsQuery, limit: limitx, offset };
   let extraFilter = '';
 
-  if (subcategoryId) {
-    extraFilter = 'AND v.subcategory_id = :subcategoryId';
-    replacements.subcategoryId = parseInt(subcategoryId);
-  } else if (categoryId) {
-    extraFilter = 'AND v.category_id = :categoryId';
-    replacements.categoryId = parseInt(categoryId);
+  const filterNodeId = subcategoryId || categoryId;
+  if (filterNodeId) {
+    const nodeIds = await descendantNodeIds(filterNodeId);
+    // Sequelize substitutes an array replacement as a bare comma-separated
+    // list (suited for IN (...)), not an array literal - ANY(:nodeIds)
+    // renders as the invalid "ANY(1,2,3)". IN (:nodeIds) is also invalid
+    // SQL when the list is empty, so that case is handled by returning no
+    // results directly instead of reaching the query.
+    if (nodeIds.length === 0) return { count: 0, rows: [] };
+    extraFilter = 'AND v.node_id IN (:nodeIds)';
+    replacements.nodeIds = nodeIds;
   }
 
   const rows = await db.query(
@@ -134,10 +153,9 @@ const searchBarFunc = async (data) => {
   }
 
   const whereConditions = [];
-  if (subcategoryId) {
-    whereConditions.push({ subcategoryId: parseInt(subcategoryId) });
-  } else if (categoryId) {
-    whereConditions.push({ categoryId: parseInt(categoryId) });
+  const filterNodeId = subcategoryId || categoryId;
+  if (filterNodeId) {
+    whereConditions.push({ nodeId: { [Op.in]: await descendantNodeIds(filterNodeId) } });
   }
 
   return Variant.findAndCountAll({
