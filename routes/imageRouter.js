@@ -2,7 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const { uploadImage, removeImage, removeImages} = require('../controller/r2Controller');
 const { addImage, getImageByID, deleteImage, getImages, deleteImageConnections} = require('../controller/imageController');
-const {Variant, Subcategory, SubcategoryImages, ProductImages, VariantImages} = require("../db/models");
+const {Variant, Subcategory, SubcategoryImages, ProductImages, VariantImages, CatalogNodeImages} = require("../db/models");
 
 const router = express.Router();
 const storage = multer.memoryStorage();
@@ -82,6 +82,9 @@ router.post('/delete', async (req, res) => {
         } else if ( target === "variant") {
             bulkData = ids.map((item, index) => ({variantId: targetId, imageId: item, position: index }))
             await VariantImages.bulkCreate(bulkData);
+        } else if ( target === "node") {
+            bulkData = ids.map((item, index) => ({nodeId: targetId, imageId: item, position: index }))
+            await CatalogNodeImages.bulkCreate(bulkData);
         }
 
       res.status(200).json({ success: true, message: 'Images attached successfully.' });

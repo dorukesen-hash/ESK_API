@@ -321,7 +321,7 @@ const deleteProductAdmin = async (id) => {
 };
 
 const getVariantsForAdmin = async (data) => {
-  const { limit, page, globalFilter, sorting, categoryId, subcategoryId, productId } = data;
+  const { limit, page, globalFilter, sorting, categoryId, subcategoryId, productId, nodeId } = data;
 
   const limitx = parseInt(limit ? limit : 10);
   const offset = parseInt(page ? page : 0) * limit;
@@ -346,11 +346,13 @@ const getVariantsForAdmin = async (data) => {
     });
   }
 
-  // categoryId/subcategoryId are denormalized ancestor pointers set on every
-  // descendant variant (a variant under a product still carries its
-  // grandparent subcategoryId/categoryId), so a level's "direct" variants
-  // must exclude rows that actually belong to a deeper level.
-  if (productId) {
+  // nodeId (catalog_node) is a single direct FK, not a denormalized
+  // ancestor pointer like categoryId/subcategoryId/productId below - a
+  // variant has exactly one nodeId, so no "exclude deeper levels" exclusion
+  // is needed the way the legacy params require.
+  if (nodeId) {
+    opt.push({ nodeId: parseInt(nodeId) });
+  } else if (productId) {
     opt.push({ productId: parseInt(productId) });
   } else if (subcategoryId) {
     opt.push({ subcategoryId: parseInt(subcategoryId), productId: null });

@@ -1,5 +1,14 @@
 const router = (module.exports = require('express').Router())
 const { getCategoriesforAdmin, getVariantsForAdmin, updateCategoryAdmin, addCategoryAdmin, deleteCategoryAdmin, getSubCategoriesforAdmin, addSubCategoryAdmin, updateSubCategoryAdmin, deleteSubCategoryAdmin, getProductsforAdmin, addProductAdmin, updateProductAdmin, deleteProductAdmin, updateVariantForAdmin, deleteVariantForAdmin, getFeaturedVariantsForAdmin } = require('../controller/adminController')
+const {
+	getFullTree: getCatalogNodeTree,
+	getNode: getCatalogNode,
+	createNode: createCatalogNode,
+	updateNode: updateCatalogNode,
+	deleteNode: deleteCatalogNode,
+	attachNodeImage,
+	reorderNodeImages,
+} = require('../controller/catalogNodeController')
 const { getCustomers, getCustomerDetailForAdmin } = require('../controller/customerController')
 const { updateUserAdmin, sendPasswordResetEmail, getUserById } = require('../controller/userController')
 const { saveShippingprofiles } = require('../controller/shippingProfile')
@@ -378,10 +387,91 @@ router.put('/product/', async (req, res, next) => {
 router.delete('/product/:id', async (req, res, next) => {
 	try {
 		const {id} = req.params
-		if (!id) throw new AppError('Id not found', 500) 
+		if (!id) throw new AppError('Id not found', 500)
 		await deleteProductAdmin(id)
 		await deleteImageConnections('product',id)
 		res.sendStatus(200)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// GET /api/admin/catalog-node
+router.get('/catalog-node', async (req, res, next) => {
+	try {
+		const data = await getCatalogNodeTree()
+		res.status(200).send(data)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// GET /api/admin/catalog-node/:id
+router.get('/catalog-node/:id', async (req, res, next) => {
+	try {
+		const { id } = req.params
+		const data = await getCatalogNode(id)
+		res.status(200).send(data)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// POST /api/admin/catalog-node
+router.post('/catalog-node', async (req, res, next) => {
+	try {
+		const data = await createCatalogNode(req.body)
+		res.status(200).send(data)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// PUT /api/admin/catalog-node/:id
+router.put('/catalog-node/:id', async (req, res, next) => {
+	try {
+		const { id } = req.params
+		const data = await updateCatalogNode(id, req.body)
+		res.status(200).send(data)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// DELETE /api/admin/catalog-node/:id
+router.delete('/catalog-node/:id', async (req, res, next) => {
+	try {
+		const { id } = req.params
+		const data = await deleteCatalogNode(id)
+		res.status(200).send(data)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// POST /api/admin/catalog-node/:id/images
+router.post('/catalog-node/:id/images', async (req, res, next) => {
+	try {
+		const { id } = req.params
+		const { imageId } = req.body
+		if (!imageId) throw new AppError('imageId is required', 400)
+		const data = await attachNodeImage(id, imageId)
+		res.status(200).send(data)
+	} catch (error) {
+		next(error)
+	}
+})
+
+// POST /api/admin/catalog-node/:id/images/reorder
+router.post('/catalog-node/:id/images/reorder', async (req, res, next) => {
+	try {
+		const { id } = req.params
+		const { images } = req.body
+		if (!images || !Array.isArray(images)) {
+			throw new AppError('Images array is required', 400)
+		}
+		const data = await reorderNodeImages(id, images)
+		res.status(200).send(data)
 	} catch (error) {
 		next(error)
 	}
