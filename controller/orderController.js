@@ -717,6 +717,33 @@ function normalizeGuestLookupEmail(email) {
   return normalized
 }
 
+// Pulled out of lookupGuestOrders as its own pure function: this [Op.and]
+// pairing is the one clause standing between this endpoint and full order
+// enumeration (orderNumber alone finding a real order regardless of whose
+// email it's paired with), so it gets its own test with no database
+// involved - see orderController.test.js.
+function buildGuestLookupWhere({ email, orderNumber }) {
+  const normalizedEmail = normalizeGuestLookupEmail(email)
+
+  // col('order.email'), not col('email') - the include chain below also
+  // joins Billing, which has its own email column; an unqualified
+  // reference is ambiguous the moment both tables are in the same query
+  // (found by running this against the real DB, not by inspection).
+  const conditions = [whereFn(fn('LOWER', col('order.email')), normalizedEmail)]
+  if (orderNumber) conditions.push({ orderNumber: String(orderNumber).trim() })
+  return { [Op.and]: conditions }
+}
+
+// A guest with more orders than this under one email is an extreme outlier
+// for this storefront's scale. Capping bounds two things at once: how many
+// rows a single anonymous request can pull back, and - since
+// attachRefundTotals below makes two live Stripe calls per order - how many
+// concurrent Stripe reads one request can trigger. Uncapped, a request for
+// a real customer's email with a long order history could fire well over a
+// hundred simultaneous Stripe calls, competing with live checkout traffic
+// on Stripe's per-account rate limit.
+const GUEST_LOOKUP_RESULT_LIMIT = 20;
+
 // Guest order lookup: filters directly on Order.email (never on customerId/
 // a session), so it never requires auth. Deliberately NOT a thin wrapper
 // around getAccountOrders (accountController.js) despite the near-identical
@@ -728,18 +755,21 @@ function normalizeGuestLookupEmail(email) {
 // Constraints: orderNumber is a sequential integer, so a lookup keyed on it
 // alone would let anyone enumerate every order ever placed.
 const lookupGuestOrders = async ({ email, orderNumber }) => {
-  const normalizedEmail = normalizeGuestLookupEmail(email)
-
-  // col('order.email'), not col('email') - the include chain below also
-  // joins Billing, which has its own email column; an unqualified
-  // reference is ambiguous the moment both tables are in the same query
-  // (found by running this against the real DB, not by inspection).
-  const whereConditions = [whereFn(fn('LOWER', col('order.email')), normalizedEmail)]
-  if (orderNumber) whereConditions.push({ orderNumber: String(orderNumber).trim() })
+  const where = buildGuestLookupWhere({ email, orderNumber })
 
   const orders = await Order.findAll({
-    where: { [Op.and]: whereConditions },
+    where,
     order: [['createdAt', 'DESC']],
+    limit: GUEST_LOOKUP_RESULT_LIMIT,
+    // Explicit allowlist, unlike getAccountOrders' unrestricted Order -
+    // that function's caller already owns the row (an authenticated
+    // customer reading their own history); this one's caller is anonymous.
+    // stripePaymentIntentId stays in the SELECT because attachRefundTotals
+    // below needs it to look up refunds, but is stripped from the
+    // response afterward - everything else here (admin notes in
+    // extra_informations, customerId/userId, isPaid, description, etc.)
+    // never needs to leave the database for this endpoint at all.
+    attributes: ['id', 'orderNumber', 'uniqueId', 'createdAt', 'price', 'trackingNumber', 'stripePaymentIntentId'],
     include: [
       {
         model: OrderItem,
@@ -773,7 +803,11 @@ const lookupGuestOrders = async ({ email, orderNumber }) => {
     ],
   })
 
-  return Promise.all(orders.map((order) => attachRefundTotals(order)))
+  const results = await Promise.all(orders.map((order) => attachRefundTotals(order)))
+  results.forEach((order) => {
+    delete order.dataValues.stripePaymentIntentId
+  })
+  return results
 }
 
 const createOrder = async (data) => {
@@ -1347,5 +1381,6 @@ module.exports = {
     exportOrdersExcel,
     attachRefundTotals,
     normalizeGuestLookupEmail,
+    buildGuestLookupWhere,
     lookupGuestOrders,
 }

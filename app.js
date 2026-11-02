@@ -11,6 +11,16 @@ const { handleStripeWebhook } = require('./controller/stripeController');
 require('./db')
 const app = express()
 
+// Deployed behind Railway's edge proxy (NEXT_PUBLIC_API_URL points at
+// eskapi-production.up.railway.app) - every request arrives at this
+// process via that one proxy hop. Without this, Express's req.ip (and
+// anything keyed on it, like the /orders/lookup rate limiter) resolves
+// to the proxy's own address for every visitor, not the real client's.
+// `1`, not `true` - trusting exactly one hop reads X-Forwarded-For's
+// last entry as the real client; `true` would trust the whole chain,
+// letting a client spoof its own address via the header.
+app.set('trust proxy', 1)
+
 // Middleware Order: First Logging, Then Parsers, Then Authentication
 app.use(morgan(':remote-addr - :remote-user [:date[clf]] ":method :url HTTP/:http-version" :status :res[content-length] :response-time ms'))
 
