@@ -1,6 +1,6 @@
 const models = require('../db/models')
-const { Order, OrderItem, Customer, Shipment, OrderStatus, User, Cart, Invoice, Transaction, Variant, VariantImages, Image, Carrier, DiscountCode, DiscountCodeRedemption, OrderItemRefund, InvoiceLineItems } = models
-const { Op } = require('sequelize')
+const { Order, OrderItem, Customer, Shipment, ShipmentStatus, OrderStatus, User, Cart, Invoice, Transaction, Variant, VariantImages, Image, Carrier, DiscountCode, DiscountCodeRedemption, OrderItemRefund, InvoiceLineItems } = models
+const { Op, fn, col, where: whereFn } = require('sequelize')
 const { createAndWhere } = require('./scopes');
 const Billing = require('../db/models/billing');
 const sendEmail = require('../utils/sendEmail');
@@ -700,6 +700,82 @@ const resendOrderConfirmation = async (orderId, actorUserId) => {
   return { sent: true };
 };
 
+// Thrown as a plain Error (not AppError) with the same statusCode/
+// isOperational/status shape AppError produces - controller/catalogNodeTree.js's
+// validateDisplayFields does the same thing, for the same reason: this file
+// has no AppError import today, and adding one for a single error site isn't
+// worth it.
+function normalizeGuestLookupEmail(email) {
+  const normalized = (email ?? '').trim().toLowerCase()
+  if (!normalized) {
+    const error = new Error('Email is required.')
+    error.statusCode = 400
+    error.isOperational = true
+    error.status = 'fail'
+    throw error
+  }
+  return normalized
+}
+
+// Guest order lookup: filters directly on Order.email (never on customerId/
+// a session), so it never requires auth. Deliberately NOT a thin wrapper
+// around getAccountOrders (accountController.js) despite the near-identical
+// include list - that function's safety depends entirely on customerId
+// coming from an authenticated session; conflating it with a path that takes
+// its filter straight from an anonymous query string would make the
+// authenticated path's safety depend on this one staying correct forever.
+// orderNumber alone (no email) is never sufficient - see the plan's Global
+// Constraints: orderNumber is a sequential integer, so a lookup keyed on it
+// alone would let anyone enumerate every order ever placed.
+const lookupGuestOrders = async ({ email, orderNumber }) => {
+  const normalizedEmail = normalizeGuestLookupEmail(email)
+
+  // col('order.email'), not col('email') - the include chain below also
+  // joins Billing, which has its own email column; an unqualified
+  // reference is ambiguous the moment both tables are in the same query
+  // (found by running this against the real DB, not by inspection).
+  const whereConditions = [whereFn(fn('LOWER', col('order.email')), normalizedEmail)]
+  if (orderNumber) whereConditions.push({ orderNumber: String(orderNumber).trim() })
+
+  const orders = await Order.findAll({
+    where: { [Op.and]: whereConditions },
+    order: [['createdAt', 'DESC']],
+    include: [
+      {
+        model: OrderItem,
+        attributes: [
+          'id', 'title', 'code', 'variant', 'variant_id', 'category',
+          'price', 'quantity', 'note', 'imgurl',
+        ],
+        include: [
+          {
+            model: OrderItemRefund,
+            attributes: ['id', 'quantity', 'amount', 'stripeRefundId', 'createdAt'],
+          },
+        ],
+      },
+      {
+        model: Shipment,
+        attributes: [
+          'id', 'name', 'firstline', 'secondline', 'city', 'state', 'zip',
+          'tracking', 'extra_informations',
+        ],
+        include: [
+          { model: Carrier, attributes: ['id', 'name'] },
+          { model: ShipmentStatus, attributes: ['id', 'name'] },
+        ],
+      },
+      { model: OrderStatus, attributes: ['id', 'name'] },
+      {
+        model: Billing,
+        attributes: ['id', 'name', 'firstline', 'secondline', 'city', 'state', 'zip', 'phone'],
+      },
+    ],
+  })
+
+  return Promise.all(orders.map((order) => attachRefundTotals(order)))
+}
+
 const createOrder = async (data) => {
   const { userInfo, order } = data;
 
@@ -1270,4 +1346,6 @@ module.exports = {
     resendOrderConfirmation,
     exportOrdersExcel,
     attachRefundTotals,
+    normalizeGuestLookupEmail,
+    lookupGuestOrders,
 }
