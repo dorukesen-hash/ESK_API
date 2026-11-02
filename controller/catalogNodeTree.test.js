@@ -3,6 +3,7 @@ const assert = require('node:assert/strict')
 const {
   buildTree,
   ancestorChain,
+  resolveBreadcrumb,
   collectDescendantIds,
   attachVariantsToTree,
   attachImagesToTree,
@@ -62,6 +63,45 @@ test('ancestorChain: returns root-first, inclusive of the target', () => {
   ]
   const chain = ancestorChain(3, nodes)
   assert.deepEqual(chain.map((n) => n.id), [1, 2, 3])
+})
+
+test('resolveBreadcrumb: null nodeId resolves to no category/subcategory', () => {
+  assert.deepEqual(resolveBreadcrumb(null, []), { category: null, subcategory: null })
+})
+
+test('resolveBreadcrumb: unknown nodeId resolves to no category/subcategory', () => {
+  assert.deepEqual(resolveBreadcrumb(999, []), { category: null, subcategory: null })
+})
+
+test('resolveBreadcrumb: a variant on a top-level department has a category but no subcategory', () => {
+  const nodes = [{ id: 1, name: 'Strapping', parentId: null }]
+  assert.deepEqual(resolveBreadcrumb(1, nodes), {
+    category: { id: 1, name: 'Strapping' },
+    subcategory: null,
+  })
+})
+
+test('resolveBreadcrumb: a variant under one level of nesting gets both', () => {
+  const nodes = [
+    { id: 1, name: 'Strapping', parentId: null },
+    { id: 2, name: 'Cord Strapping', parentId: 1 },
+  ]
+  assert.deepEqual(resolveBreadcrumb(2, nodes), {
+    category: { id: 1, name: 'Strapping' },
+    subcategory: { id: 2, name: 'Cord Strapping' },
+  })
+})
+
+test('resolveBreadcrumb: deeper nesting still reports only the department and the variant\'s own immediate node', () => {
+  const nodes = [
+    { id: 1, name: 'Strapping', parentId: null },
+    { id: 2, name: 'Cord Strapping', parentId: 1 },
+    { id: 3, name: 'Composite Strapping', parentId: 2 },
+  ]
+  assert.deepEqual(resolveBreadcrumb(3, nodes), {
+    category: { id: 1, name: 'Strapping' },
+    subcategory: { id: 3, name: 'Composite Strapping' },
+  })
 })
 
 test('collectDescendantIds: includes the root itself even with no children', () => {

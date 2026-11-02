@@ -62,6 +62,26 @@ function ancestorChain(nodeId, nodes) {
   return chain
 }
 
+// A product's "where does this live" breadcrumb, built from its real
+// catalog_node ancestry rather than the legacy category/subcategory
+// tables a node may have been migrated away from. `category` is always
+// the top-level department; `subcategory` is the product's own
+// immediate node, or null when that node IS the department (nothing in
+// between) - callers decide how to render the absence, this just
+// reports it rather than duplicating the department name as both.
+function resolveBreadcrumb(nodeId, nodes) {
+  if (nodeId == null) return { category: null, subcategory: null }
+  const chain = ancestorChain(nodeId, nodes)
+  if (chain.length === 0) return { category: null, subcategory: null }
+  const department = chain[0]
+  const immediate = chain[chain.length - 1]
+  return {
+    category: { id: department.id, name: department.name },
+    subcategory:
+      immediate.id === department.id ? null : { id: immediate.id, name: immediate.name },
+  }
+}
+
 function collectDescendantIds(nodes, rootId) {
   const childrenByParent = new Map()
   for (const node of nodes) {
@@ -175,6 +195,7 @@ function toTitleCase(str) {
 module.exports = {
   buildTree,
   ancestorChain,
+  resolveBreadcrumb,
   collectDescendantIds,
   attachVariantsToTree,
   attachImagesToTree,
