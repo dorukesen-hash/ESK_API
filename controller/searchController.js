@@ -1,9 +1,16 @@
 const AppError = require('../utils/appError')
-const  { Variant, Subcategory, Category, CatalogNode}  = require('../db/models');
+const  { Variant, CatalogNode}  = require('../db/models');
 const { QueryTypes, Op } = require('sequelize');
 const { createAndWhere } = require('./scopes');
-const { collectDescendantIds } = require('./catalogNodeTree');
+const { collectDescendantIds, resolveBreadcrumb } = require('./catalogNodeTree');
 const db = require('../db/index.js');
+
+// Loaded once per request and threaded through both the descendant-id
+// filter and the result breadcrumb below, instead of each fetching its
+// own copy of the (small, a couple hundred rows) catalog_node table.
+async function fetchCatalogNodes() {
+  return CatalogNode.findAll({ raw: true, attributes: ['id', 'parentId', 'name'] })
+}
 
 // `categoryId`/`subcategoryId` here are catalog_node ids (the FE sources
 // them from the catalog_node-backed /category and /catalog-node endpoints -
@@ -13,16 +20,15 @@ const db = require('../db/index.js');
 // v.category_id/v.subcategory_id directly (the legacy FK columns) silently
 // matched nothing. Resolve the given id's full descendant subtree instead
 // and filter on the variant's catalog_node-based `nodeId` column.
-async function descendantNodeIds(nodeId) {
-  const nodes = await CatalogNode.findAll({ raw: true, attributes: ['id', 'parentId'] })
-  return collectDescendantIds(nodes, parseInt(nodeId))
+function descendantNodeIds(nodeId, catalogNodes) {
+  return collectDescendantIds(catalogNodes, parseInt(nodeId))
 }
 
 // Full-text search fields grouped by relevance weight (Postgres tsvector
 // weight labels, highest to lowest). A title/SKU match should always
 // outrank a term that only happens to appear in a marketing bullet point.
-// Each entry is a fully-qualified column reference so joined tables
-// (category/subcategory names) can sit alongside the variant's own columns.
+// Each entry is a fully-qualified column reference so the joined
+// catalog_node name can sit alongside the variant's own columns.
 const WEIGHT_A_COLUMNS = ['v.title', 'v.sku'];
 const WEIGHT_B_COLUMNS = [
   'v.description',
@@ -32,8 +38,7 @@ const WEIGHT_B_COLUMNS = [
   'v.style',
   'v.product_finish',
   'v.product_grade',
-  'c.name',
-  's.name',
+  'cn.name',
 ];
 const WEIGHT_C_COLUMNS = [
   'v.bullet_1',
@@ -85,12 +90,13 @@ async function fullTextSearch({ searchValue, limitx, offset, categoryId, subcate
     return { count: 0, rows: [] };
   }
 
+  const catalogNodes = await fetchCatalogNodes();
   const replacements = { query: tsQuery, limit: limitx, offset };
   let extraFilter = '';
 
   const filterNodeId = subcategoryId || categoryId;
   if (filterNodeId) {
-    const nodeIds = await descendantNodeIds(filterNodeId);
+    const nodeIds = descendantNodeIds(filterNodeId, catalogNodes);
     // Sequelize substitutes an array replacement as a bare comma-separated
     // list (suited for IN (...)), not an array literal - ANY(:nodeIds)
     // renders as the invalid "ANY(1,2,3)". IN (:nodeIds) is also invalid
@@ -103,13 +109,10 @@ async function fullTextSearch({ searchValue, limitx, offset, categoryId, subcate
 
   const rows = await db.query(
     `
-    SELECT v.id, v.title, v.sku,
-           c.id AS "categoryId", c.name AS "categoryName",
-           s.id AS "subcategoryId", s.name AS "subcategoryName",
+    SELECT v.id, v.title, v.sku, v.node_id AS "nodeId",
            ts_rank(${SEARCH_VECTOR_SQL}, to_tsquery('english', :query)) AS rank
     FROM variant v
-    LEFT JOIN category c ON c.id = v.category_id
-    LEFT JOIN subcategory s ON s.id = v.subcategory_id
+    LEFT JOIN catalog_node cn ON cn.id = v.node_id
     WHERE (${SEARCH_VECTOR_SQL}) @@ to_tsquery('english', :query)
       ${extraFilter}
     ORDER BY rank DESC, v.id ASC
@@ -122,8 +125,7 @@ async function fullTextSearch({ searchValue, limitx, offset, categoryId, subcate
     `
     SELECT COUNT(*)::int AS count
     FROM variant v
-    LEFT JOIN category c ON c.id = v.category_id
-    LEFT JOIN subcategory s ON s.id = v.subcategory_id
+    LEFT JOIN catalog_node cn ON cn.id = v.node_id
     WHERE (${SEARCH_VECTOR_SQL}) @@ to_tsquery('english', :query)
       ${extraFilter}
     `,
@@ -136,8 +138,7 @@ async function fullTextSearch({ searchValue, limitx, offset, categoryId, subcate
       id: row.id,
       title: row.title,
       sku: row.sku,
-      category: { id: row.categoryId, name: row.categoryName },
-      subcategory: { id: row.subcategoryId, name: row.subcategoryName },
+      ...resolveBreadcrumb(row.nodeId, catalogNodes),
     })),
   };
 }
@@ -152,20 +153,30 @@ const searchBarFunc = async (data) => {
     return fullTextSearch({ searchValue, limitx, offset, categoryId, subcategoryId });
   }
 
+  const catalogNodes = await fetchCatalogNodes();
   const whereConditions = [];
   const filterNodeId = subcategoryId || categoryId;
   if (filterNodeId) {
-    whereConditions.push({ nodeId: { [Op.in]: await descendantNodeIds(filterNodeId) } });
+    whereConditions.push({ nodeId: { [Op.in]: descendantNodeIds(filterNodeId, catalogNodes) } });
   }
 
-  return Variant.findAndCountAll({
+  const { count, rows } = await Variant.findAndCountAll({
     limit: limitx,
     offset,
     order: [['createdAt', 'ASC']],
     where: createAndWhere(whereConditions),
-    attributes: ['id', 'title', 'sku'],
-    include: [{ model: Subcategory }, { model: Category }],
+    attributes: ['id', 'title', 'sku', 'nodeId'],
   });
+
+  return {
+    count,
+    rows: rows.map((row) => ({
+      id: row.id,
+      title: row.title,
+      sku: row.sku,
+      ...resolveBreadcrumb(row.nodeId, catalogNodes),
+    })),
+  };
 };
 
 module.exports = {
